@@ -1,0 +1,6 @@
+name: astrbot_plugin_st_bridge
+display_name: AstrBot ST Bridge
+desc: 把 QQ 消息桥接到 SillyTavern，并用 Irodori / GPT-SoVITS 把日文回复合成为语音，内置 11453 管理控制台。
+version: 1.0.0
+author: AIchat
+astrbot_version: ">=4.29,<5"

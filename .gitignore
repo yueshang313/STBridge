@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+/data/
+temp_audio/
+*.log
+astrbot_plugin_st_bridge/data/
+/release/dist/
+/release/cache/

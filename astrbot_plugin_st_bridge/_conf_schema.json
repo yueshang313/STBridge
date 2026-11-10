@@ -1,0 +1,12 @@
+{
+  "operator_platform_id": {
+    "description": "已迁到 11453 控制台“系统 → 常规 → 主人”；这里只在第一次启动时导入一次，之后改控制台，这里的值不再生效。原含义：允许私聊桥接和执行 /stbridge_recover 的 AstrBot 平台 ID，必须与私聊事件中的平台 ID 完全一致。",
+    "type": "string",
+    "default": ""
+  },
+  "operator_sender_id": {
+    "description": "已迁到 11453 控制台“系统 → 常规 → 主人”；这里只在第一次启动时导入一次，之后改控制台，这里的值不再生效。原含义：允许私聊桥接和执行 /stbridge_recover 的发送者 ID，必须与私聊事件中的发送者 ID 完全一致。",
+    "type": "string",
+    "default": ""
+  }
+}

@@ -1,0 +1,198 @@
+/* ST Bridge panel. Every selector is scoped to .st-bridge-client-settings; colors come from ST theme variables. */
+
+.st-bridge-client-settings {
+    --stb-accent: var(--SmartThemeQuoteColor, #6c9bd2);
+    --stb-border: var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.45));
+    --stb-card-bg: rgba(128, 128, 128, 0.1);
+    --stb-text: var(--SmartThemeBodyColor, inherit);
+    --stb-gap: 0.6em;
+}
+
+@supports (background: color-mix(in srgb, red 10%, transparent)) {
+    .st-bridge-client-settings {
+        --stb-card-bg: color-mix(in srgb, var(--SmartThemeBodyColor, #888) 7%, transparent);
+    }
+}
+
+.st-bridge-client-settings {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    writing-mode: horizontal-tb;
+    word-break: normal;
+}
+
+.st-bridge-client-settings .inline-drawer,
+.st-bridge-client-settings .inline-drawer-content {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+}
+
+.st-bridge-client-settings .inline-drawer-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--stb-gap);
+    padding-top: 0.4em;
+}
+
+/* subtitle + tabs */
+.st-bridge-client-settings .st-bridge-subtitle {
+    font-size: 0.85em;
+    opacity: 0.65;
+    margin: -0.2em 0 0;
+}
+
+.st-bridge-client-settings .st-bridge-subtitle:empty {
+    display: none;
+}
+
+.st-bridge-client-settings .st-bridge-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.25em;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--stb-border);
+    scrollbar-width: thin;
+}
+
+.st-bridge-client-settings .st-bridge-tab {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
+    margin: 0;
+    padding: 0.5em 0.9em;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--stb-text);
+    font: inherit;
+    white-space: nowrap;
+    opacity: 0.7;
+    cursor: pointer;
+}
+
+.st-bridge-client-settings .st-bridge-tab:hover {
+    opacity: 1;
+}
+
+.st-bridge-client-settings .st-bridge-tab.active {
+    color: var(--stb-accent);
+    border-bottom-color: var(--stb-accent);
+    font-weight: 600;
+    opacity: 1;
+}
+
+.st-bridge-client-settings .st-bridge-pane {
+    display: flex;
+    flex-direction: column;
+    gap: var(--stb-gap);
+    min-width: 0;
+}
+
+.st-bridge-client-settings .st-bridge-pane[hidden] {
+    display: none;
+}
+
+/* cards */
+.st-bridge-client-settings .st-bridge-pane > section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 0.7em 0.8em;
+    background: var(--stb-card-bg);
+    border: 1px solid var(--stb-border);
+    border-radius: 10px;
+}
+
+.st-bridge-client-settings .st-bridge-card-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    margin: 0;
+    font-size: 1em;
+    font-weight: 600;
+}
+
+.st-bridge-client-settings .st-bridge-card-title i {
+    color: var(--stb-accent);
+    width: 1.2em;
+    text-align: center;
+}
+
+.st-bridge-client-settings .st-bridge-note {
+    margin: 0;
+    font-size: 0.9em;
+    opacity: 0.75;
+    overflow-wrap: anywhere;
+}
+
+.st-bridge-client-settings .st-bridge-row,
+.st-bridge-client-settings .st-bridge-client-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5em;
+    min-width: 0;
+}
+
+/* controls: buttons never squeeze into vertical text */
+.st-bridge-client-settings .menu_button {
+    flex: 0 0 auto;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.st-bridge-client-settings .text_pole {
+    box-sizing: border-box;
+    min-width: 0;
+    margin: 0;
+}
+
+.st-bridge-client-settings textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+}
+
+.st-bridge-client-settings #st-bridge-client-bridge-port {
+    width: 7em;
+}
+
+.st-bridge-client-settings #st-bridge-client-affinity-character {
+    flex: 1 1 12em;
+}
+
+.st-bridge-client-settings #st-bridge-client-affinity-value {
+    width: 6em;
+}
+
+/* result / status areas */
+.st-bridge-client-settings #st-bridge-client-binding {
+    display: grid;
+    gap: 0.25em;
+    overflow-wrap: anywhere;
+}
+
+.st-bridge-client-settings #st-bridge-client-status {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.5em;
+    padding: 0.5em 0.75em;
+    border: 1px solid var(--stb-border);
+    border-radius: 6px;
+    overflow-wrap: anywhere;
+}
+
+.st-bridge-client-settings .st-bridge-client-result,
+.st-bridge-client-settings .st-bridge-client-test-result,
+.st-bridge-client-settings #st-bridge-client-affinity-result,
+.st-bridge-client-settings #st-bridge-client-injection-status,
+.st-bridge-client-settings #st-bridge-client-injection-result {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
