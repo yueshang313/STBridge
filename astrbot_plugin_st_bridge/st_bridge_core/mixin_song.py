@@ -35,6 +35,21 @@ SONG_RESEARCH_EMPTY_TEXT = fill_nickname(_DEFAULT_TEXTS["song_research_empty"], 
 SONG_PICK_RANGE_TEXT = fill_nickname(_DEFAULT_TEXTS["song_pick_range"], _DEFAULT_NICKNAME)
 
 
+def song_error_kind(error: BaseException) -> str:
+    """A short, path-free name for a search failure: the source's own `kind` when it has one, else the type."""
+    if isinstance(error, TimeoutError):
+        return "Timeout"
+    kind = getattr(error, "kind", None)
+    name = kind if isinstance(kind, str) and kind else type(error).__name__
+    return re.sub(r"[^A-Za-z0-9_.:=\-]", "", name)[:60] or "Error"
+
+
+def song_failure_result(errors: list[str] | None) -> str:
+    """The log result of a search that returned nothing: NoResults when it really found none, else why it failed."""
+    kinds = list(dict.fromkeys(errors or []))
+    return "failed:" + (",".join(kinds[:4]) if kinds else "NoResults")
+
+
 class SongMixin:
     """Chat song requests (点歌): permission, list, pick and delivery."""
 
@@ -223,10 +238,17 @@ class SongMixin:
         content = getattr(request, "content", "")
         return content if isinstance(content, str) else ""
 
-    async def _song_list(self, query: str, *, group: bool, extra: str = "") -> tuple[list, str]:
-        """Search the library and the sources; (entries, list text), empty when nothing usable came back."""
+    async def _song_list(
+        self, query: str, *, group: bool, extra: str = "", errors: list[str] | None = None
+    ) -> tuple[list, str]:
+        """Search the library and the sources; (entries, list text), empty when nothing usable came back.
+
+        `errors` (optional) collects why a source failed, e.g. "wy=timeout" or "MusicKeyNotSet".
+        """
         cover = self._cover
         if cover is None:
+            if errors is not None:
+                errors.append("CoverUnavailable")
             return [], ""
         settings = self._song_settings()
         library_hits = cover.library_matches(query, extra or None)
@@ -234,8 +256,17 @@ class SongMixin:
 
         async def one(source: str) -> tuple[str, list]:
             try:
-                return source, (await cover.search_online(search_name, source))["results"]
-            except Exception:
+                outcome = await cover.search_online(search_name, source)
+                if errors is not None:
+                    for item in outcome.get("errors") or []:
+                        errors.append(f"{source}={item.get('error')}")
+                return source, outcome["results"]
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                if errors is not None:
+                    kind = song_error_kind(error)
+                    errors.append(kind if kind == "MusicKeyNotSet" else f"{source}={kind}")
                 return source, []
 
         pairs = await asyncio.gather(*(one(source) for source in LIST_SOURCES))
@@ -248,14 +279,18 @@ class SongMixin:
             timeout_seconds=settings["list_timeout_seconds"],
         )
 
-    async def _song_list_guarded(self, query: str, *, group: bool, extra: str = "") -> tuple[list, str]:
+    async def _song_list_guarded(
+        self, query: str, *, group: bool, extra: str = "", errors: list[str] | None = None
+    ) -> tuple[list, str]:
         try:
             return await asyncio.wait_for(
-                self._song_list(query, group=group, extra=extra), SONG_SEARCH_TIMEOUT_SECONDS
+                self._song_list(query, group=group, extra=extra, errors=errors), SONG_SEARCH_TIMEOUT_SECONDS
             )
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as error:
+            if errors is not None:
+                errors.append(song_error_kind(error))
             return [], ""
 
     # A: the reply carries [唱歌:歌名]
@@ -267,8 +302,11 @@ class SongMixin:
             self._song_skip_log(speaker.key, "tag", speaker.sing_reason, speaker.track)
             return None
         try:
-            task = asyncio.create_task(self._song_list(name, group=speaker.track == GROUP_TRACK))
+            errors: list[str] = []
+            task = asyncio.create_task(self._song_list(name, group=speaker.track == GROUP_TRACK, errors=errors))
             task.add_done_callback(_retrieve_task_exception)
+            # Weak keys: if the reply is cancelled before _finish_song_tag runs, the entry leaves with the task.
+            self._song_tag_errors[task] = errors
             return task
         except Exception:
             return None
@@ -277,12 +315,14 @@ class SongMixin:
         self, msg: IncomingMessage, speaker: _Speaker, name: str, task: asyncio.Task, preset: dict | None = None
     ) -> None:
         """After the reply went out: send the numbered list (or the failure line). Never raises."""
+        errors = self._song_tag_errors.pop(task, [])
         try:
             try:
                 entries, text = await asyncio.wait_for(task, SONG_SEARCH_TIMEOUT_SECONDS)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as error:
+                errors.append(song_error_kind(error))
                 entries, text = [], ""
             conversation = msg.conversation_id
             if entries and conversation:
@@ -290,7 +330,7 @@ class SongMixin:
                 await self._platform.send(msg.ref, [Segment.of_text(text)])
                 self._song_register(conversation, speaker.key, name, entries, speaker.track == GROUP_TRACK, "tag", preset)
             else:
-                self._song_log(speaker.key, "tag", "none", "failed:NoResults")
+                self._song_log(speaker.key, "tag", "none", song_failure_result(errors))
                 await self._platform.send(msg.ref, [Segment.of_text(self._song_text("fail_texts", name))])
         except asyncio.CancelledError:
             raise
@@ -580,9 +620,10 @@ class SongMixin:
             self._song_skip_log(speaker.key, "command", reason, speaker.track)
             yield ReplyBatch.of_text(self._song_refusal_text(reason, name))
             return
-        entries, text = await self._song_list_guarded(name, group=group)
+        errors: list[str] = []
+        entries, text = await self._song_list_guarded(name, group=group, errors=errors)
         if not entries:
-            self._song_log(speaker.key, "command", "none", "failed:NoResults")
+            self._song_log(speaker.key, "command", "none", song_failure_result(errors))
             yield ReplyBatch.of_text(self._song_text("fail_texts", name))
             return
         self._song_register(conversation, speaker.key, name, entries, group, "command", preset)

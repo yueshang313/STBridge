@@ -107,8 +107,10 @@ class AffinitySettingsTests(unittest.TestCase):
 
             broken = dict(legacy, affinity={"max_delta": 500})
             (root / "config.json").write_text(json.dumps(broken), encoding="utf-8")
-            with self.assertRaises(RuntimeError):
-                ConfigStore(root)
+            store = ConfigStore(root)  # 101e: a config that fails its checks falls back to the defaults
+            self.assertEqual(store.recovery["used"], "default")
+            self.assertEqual(store.config["affinity"], stored_affinity_defaults())
+            self.assertEqual((root / store.recovery["broken"][0]).read_text(encoding="utf-8"), json.dumps(broken))
 
 
 class UpdateBlockParsingTests(unittest.TestCase):
@@ -209,13 +211,16 @@ class AffinityStoreTests(unittest.TestCase):
             with self.assertRaises(EmotionConfigError):
                 store.set_value(key, value)
 
-    def test_corrupt_file_is_never_overwritten(self):
+    def test_corrupt_file_is_kept_under_a_new_name_and_never_overwritten(self):
         for content in (b"{ broken", b'{"version": 4, "users": {}}', b'{"version": 1, "users": {"k": {"value": "x"}}}'):
             with self.subTest(content=content):
                 (self.root / "affinity.json").write_bytes(content)
-                with self.assertRaises(RuntimeError):
-                    AffinityStore(self.root)
-                self.assertEqual((self.root / "affinity.json").read_bytes(), content)
+                store = AffinityStore(self.root)
+                self.assertEqual(store.recovery["used"], "empty")
+                self.assertEqual(store.data["users"], {})
+                self.assertEqual((self.root / store.recovery["broken"][0]).read_bytes(), content)
+                (self.root / store.recovery["broken"][0]).unlink()
+                (self.root / "affinity.json").unlink()
 
     def test_writes_retry_transient_permission_errors(self):
         store = AffinityStore(self.root)

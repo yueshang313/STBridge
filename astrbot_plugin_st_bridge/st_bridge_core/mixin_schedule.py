@@ -18,7 +18,7 @@ from .proactive_chat_config import DUPLICATE_NOTE, ELAPSED_PLACEHOLDER, UNANSWER
 from .schedule_config import schedule_section
 from .tts_clients import IrodoriRequestError, ModelSelectionError, safe_error_type
 from .tts_service import ServiceStartError
-from .bridge_types import REQUEST_TIMEOUT_SECONDS, _ParsedReply, _console_error_type, cap_pairs
+from .bridge_types import _ParsedReply, _console_error_type, cap_pairs
 
 
 class _ProactiveYield(Exception):
@@ -256,7 +256,7 @@ class ScheduleMixin:
             try:
                 return state_manager.create_request(
                     content,
-                    timeout_seconds=REQUEST_TIMEOUT_SECONDS,
+                    timeout_seconds=settings["reply_timeout_seconds"],
                     affinity_writes=writes,
                     kind="proactive",
                     macros=macros,

@@ -447,10 +447,13 @@ def affinity_tier_name(settings: dict[str, Any], value: int) -> str:
 
 QUEUE_MAX_WAITING_RANGE = (1, 20)
 QUEUE_MAX_WAIT_SECONDS_RANGE = (30, 600)
+QUEUE_REPLY_TIMEOUT_RANGE = (60, 600)
+# A dispatched turn may hold the queue slot for the reply time limit plus this much before it is force-released.
+QUEUE_HOLD_EXTRA_SECONDS = 120
 
 
 def default_queue_settings() -> dict[str, Any]:
-    return {"max_waiting": 5, "max_wait_seconds": 180}
+    return {"max_waiting": 10, "max_wait_seconds": 300, "reply_timeout_seconds": 180}
 
 
 def _queue_int(value: Any, label: str, bounds: tuple[int, int]) -> int:
@@ -472,6 +475,9 @@ def validate_queue_settings(settings: Any) -> dict[str, Any]:
         "max_wait_seconds": _queue_int(
             merged.get("max_wait_seconds"), "queue max wait seconds", QUEUE_MAX_WAIT_SECONDS_RANGE
         ),
+        "reply_timeout_seconds": _queue_int(
+            merged.get("reply_timeout_seconds"), "queue reply timeout seconds", QUEUE_REPLY_TIMEOUT_RANGE
+        ),
     }
 
 
@@ -481,6 +487,42 @@ def queue_settings(config: Any) -> dict[str, Any]:
         return validate_queue_settings(config.get("queue", {}))
     except (AttributeError, EmotionConfigError):
         return default_queue_settings()
+
+
+# The console's own state (U5-1): what the "开始使用" checklist remembers. Not part of a preset.
+ONBOARDING_KEYS = ("tested", "voice_skipped", "hidden", "completed")
+
+
+def default_console_settings() -> dict[str, Any]:
+    return {"onboarding": {key: False for key in ONBOARDING_KEYS}}
+
+
+def validate_onboarding(section: Any) -> dict[str, bool]:
+    """Validate the checklist flags; missing ones are False, unknown ones are refused."""
+    if not isinstance(section, dict):
+        raise EmotionConfigError(400, "onboarding must be an object")
+    unknown = set(section) - set(ONBOARDING_KEYS)
+    if unknown:
+        raise EmotionConfigError(400, "unknown onboarding key")
+    merged = {**default_console_settings()["onboarding"], **section}
+    for key in ONBOARDING_KEYS:
+        if not isinstance(merged[key], bool):
+            raise EmotionConfigError(400, f"invalid onboarding {key}")
+    return {key: merged[key] for key in ONBOARDING_KEYS}
+
+
+def validate_console_settings(section: Any) -> dict[str, Any]:
+    if not isinstance(section, dict):
+        raise EmotionConfigError(400, "console settings must be an object")
+    return {"onboarding": validate_onboarding(section.get("onboarding", {}))}
+
+
+def console_settings(config: Any) -> dict[str, Any]:
+    """Validated console settings from a config, falling back to the defaults."""
+    try:
+        return validate_console_settings(config.get("console", {}))
+    except (AttributeError, EmotionConfigError):
+        return default_console_settings()
 
 
 MOOD_DECAY_RANGE = (5, 1440)
@@ -515,7 +557,7 @@ STICKER_COOLDOWN_RANGE = (0, 3600)
 
 
 def default_sticker_settings() -> dict[str, Any]:
-    return {"enabled": True, "prob": 30, "cooldown": 60}
+    return {"enabled": True, "prob": 100, "cooldown": 0}
 
 
 def validate_sticker_settings(settings: Any) -> dict[str, Any]:
@@ -553,11 +595,12 @@ def default_tts_settings() -> dict[str, Any]:
             "stop_on_exit": True,
             "start_timeout": 180,
             "tts_timeout_minutes": 5,
+            "voice_wait_seconds": 60,
             "prob": 100.0,
             "text_limit": 0,
             "cooldown": 0,
-            "send_text_with_audio": False,
-            "split_messages": False,
+            "send_text_with_audio": True,
+            "split_messages": True,
             "split_interval": 1.5,
             "split_max": 3,
         },
@@ -632,6 +675,9 @@ def _validate_tts_common(section: Any) -> dict[str, Any]:
         "start_timeout": _number(merged.get("start_timeout"), "start_timeout", 30, 600, True),
         "tts_timeout_minutes": _number(
             merged.get("tts_timeout_minutes"), "tts_timeout_minutes", 3, 15, True
+        ),
+        "voice_wait_seconds": _number(
+            merged.get("voice_wait_seconds"), "voice_wait_seconds", 10, 300, True
         ),
         "prob": _number(merged.get("prob"), "prob", 0.0, 100.0),
         "text_limit": _number(merged.get("text_limit"), "text_limit", 0, 10000, True),
@@ -802,15 +848,45 @@ def _injection_module():
     return st_injection
 
 
+# Starter character for a brand-new config: names and emotion styles only (no model and no paths).
+DEFAULT_CHARACTER_NAME = "琴音"
+DEFAULT_CHARACTER_STYLES: tuple[tuple[str, str, str], ...] = (
+    ("无感情", "明るく元気な少女が、普段どおりの調子で自然に話している。", ""),
+    ("开心", "嬉しそうに、明るく弾んだ声で楽しげに話している。", "😊"),
+    ("激动", "テンションが高く、興奮して勢いよく話している。", "😆"),
+    ("害羞", "恥ずかしそうに、照れながら小さめの声で話している。", "🫣"),
+    ("惊讶", "驚いて、思わず声を上げるように話している。", "😲"),
+    ("疑惑", "不思議そうに、首をかしげながら問いかけるように話している。", "🤔"),
+    ("认真", "真剣な表情で、落ち着いてはっきりと話している。", ""),
+    ("生气", "不満げに、少し怒って拗ねたように話している。", "😠"),
+    ("伤心", "悲しそうに、声を震わせながら静かに話している。", "🥺"),
+)
+
+
+def default_characters() -> dict[str, Any]:
+    emotions = {name: {**default_emotion(), "caption": caption, "emoji": emoji} for name, caption, emoji in DEFAULT_CHARACTER_STYLES}
+    return {
+        DEFAULT_CHARACTER_NAME: {
+            "name": DEFAULT_CHARACTER_NAME,
+            "model_name": "",
+            "default_emotion": "无感情",
+            "nickname": DEFAULT_CHARACTER_NAME,
+            "st_name": "藤田琴音",
+            "emotions": emotions,
+        }
+    }
+
+
 def default_config() -> dict[str, Any]:
     return {
         "version": 1,
-        "default_character": "",
+        "default_character": DEFAULT_CHARACTER_NAME,
         "default_emotion": "neutral",
         "models": {},
-        "characters": {},
+        "characters": default_characters(),
         "affinity": stored_affinity_defaults(),
         "queue": default_queue_settings(),
+        "console": default_console_settings(),
         "stickers": default_sticker_settings(),
         "mood": default_mood_settings(),
         "schedule": _schedule_module().default_schedule_section(),
@@ -878,6 +954,9 @@ def validate_config(config: Any) -> None:
     # Optional; configs written before Q1 get the defaults when loaded.
     if "queue" in config:
         validate_queue_settings(config["queue"])
+    # Optional; configs written before U5-1 get the defaults when loaded.
+    if "console" in config:
+        validate_console_settings(config["console"])
     # Optional; configs written before K1 get the defaults when loaded.
     if "stickers" in config:
         validate_sticker_settings(config["stickers"])
@@ -1235,6 +1314,7 @@ def fill_config_defaults(config: dict[str, Any]) -> None:
     config.setdefault("st_injection", _injection_module().default_injection_settings())
     fill_tier_descriptions(config.get("affinity"))
     config.setdefault("queue", default_queue_settings())
+    config["console"] = console_settings(config)
     config.setdefault("stickers", default_sticker_settings())
     config.setdefault("mood", default_mood_settings())
     config.setdefault("schedule", _schedule_module().default_schedule_section())
@@ -1263,9 +1343,34 @@ def _replace_with_retry(source: str, target: Path) -> None:
             time.sleep(delay)
 
 
-class ConfigStore:
-    """Own config.json and the default reference-audio directory."""
+class CorruptDataFile(ValueError):
+    """A data file that is readable but not usable (broken JSON, wrong structure, failed checks)."""
 
+
+def quarantine_file(path: Path) -> str | None:
+    """Rename a broken data file to `<name>.broken-<YYYYMMDD-HHMMSS>` (never overwrites); its new name."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for attempt in range(100):
+        target = path.with_name(f"{path.name}.broken-{stamp}" + (f"-{attempt}" if attempt else ""))
+        if target.exists():
+            continue
+        try:
+            os.replace(path, target)
+        except OSError:
+            return None
+        return target.name
+    return None
+
+
+class ConfigStore:
+    """Own config.json and the default reference-audio directory.
+
+    A config.json that cannot be used (broken JSON, a stray BOM is fine, failed checks) is not fatal:
+    the broken file is renamed to config.json.broken-<time>, then config.json.bak is tried, then the
+    defaults. The fallback is written to config.json but never to the .bak (an unusable file is
+    renamed away first, so a saved default cannot replace the last good copy), and `recovery`
+    tells the console to show a red bar until the user saves once.
+    """
     def __init__(self, data_dir: Path, logger: Any = None):
         self._logger = logger
         self.data_dir = Path(data_dir).resolve()
@@ -1275,7 +1380,32 @@ class ConfigStore:
         self.audio_dir.mkdir(parents=True, exist_ok=True)
         self._lock = asyncio.Lock()
         self._frozen = False
+        # {"used": "backup" | "default", "broken": [renamed file names]} while a fallback config is in use.
+        self.recovery: dict[str, Any] | None = None
         self.config = self._load_or_create()
+
+    @property
+    def backup_path(self) -> Path:
+        return self.config_path.with_suffix(".json.bak")
+
+    def _read_checked(self, path: Path) -> tuple[dict[str, Any], bool, list[tuple[str, str]]]:
+        """Read, migrate and validate one config file. OSError stays an OSError; a bad file is CorruptDataFile."""
+        with path.open("r", encoding="utf-8-sig") as handle:
+            try:
+                config = json.load(handle)
+            except ValueError as exc:
+                raise CorruptDataFile("config is not valid JSON") from exc
+        if not isinstance(config, dict):
+            raise CorruptDataFile("config is not an object")
+        # Migrate first: the old song texts leave song_request before it is validated, and whatever they held
+        # (an odd {placeholder}, a bad length) can only ever replace them by defaults, never fail the load.
+        replaced: list[tuple[str, str]] = []
+        try:
+            migrated = migrate_g1(config, replaced)
+            validate_config(config)
+        except Exception as exc:
+            raise CorruptDataFile("console config has invalid entries") from exc
+        return config, migrated, replaced
 
     def _load_or_create(self) -> dict[str, Any]:
         if not self.config_path.exists():
@@ -1283,18 +1413,15 @@ class ConfigStore:
             self._atomic_write(config)
             return config
         try:
-            with self.config_path.open("r", encoding="utf-8") as handle:
-                config = json.load(handle)
-        except (OSError, json.JSONDecodeError) as exc:
+            config, migrated, replaced = self._read_checked(self.config_path)
+        except OSError as exc:
+            # Not a sign of a broken file (a locked share, no permission): leave everything alone.
             raise RuntimeError("cannot read console config") from exc
-        # Migrate first: the old song texts leave song_request before it is validated, and whatever they held
-        # (an odd {placeholder}, a bad length) can only ever replace them by defaults, never fail the load.
-        replaced: list[tuple[str, str]] = []
-        migrated = migrate_g1(config, replaced)
-        try:
-            validate_config(config)
-        except EmotionConfigError as exc:
-            raise RuntimeError("console config has invalid entries") from exc
+        except CorruptDataFile:
+            return self._recover()
+        return self._finish_load(config, migrated, replaced)
+
+    def _finish_load(self, config: dict[str, Any], migrated: bool, replaced: list[tuple[str, str]]) -> dict[str, Any]:
         if replaced:
             # The user's own wording stays in the backup; the console tells the user what was replaced.
             config["texts_notice"] = {"replaced": [key for key, _ in replaced], "backup": "config.json.bak-g1"}
@@ -1308,6 +1435,36 @@ class ConfigStore:
         fill_config_defaults(config)
         if migrated:
             self._atomic_write(config)
+        return config
+
+    def _recover(self) -> dict[str, Any]:
+        """config.json is unusable: set it aside, then use config.json.bak, else the defaults."""
+        broken = [quarantine_file(self.config_path)]
+        if broken[0] is None:
+            raise RuntimeError("cannot set aside the broken console config")
+        self._warn(f"[STBridge] config.json is unusable, renamed to {broken[0]} (ConfigCorrupt)")
+        backup = self.backup_path
+        used = "default"
+        config: dict[str, Any] | None = None
+        if backup.exists():
+            try:
+                config, migrated, replaced = self._read_checked(backup)
+            except CorruptDataFile:
+                name = quarantine_file(backup)
+                if name is not None:
+                    broken.append(name)
+                    self._warn(f"[STBridge] config.json.bak is unusable too, renamed to {name} (ConfigBackupCorrupt)")
+            except OSError:
+                pass
+            else:
+                shutil.copy2(backup, self.config_path)  # the .bak itself is not touched
+                config = self._finish_load(config, migrated, replaced)
+                used = "backup"
+        if config is None:
+            config = default_config()
+            self._atomic_write(config)  # no config.json exists now, so no .bak is replaced
+        self.recovery = {"used": used, "broken": broken}
+        self._warn(f"[STBridge] Console config fell back to the {used} (ConfigRecovered)")
         return config
 
     def _warn(self, message: str) -> None:
@@ -1347,6 +1504,7 @@ class ConfigStore:
             validate_config(candidate)
             self._atomic_write(candidate)
             self.config = candidate
+            self.recovery = None  # the user saved: the fallback is now their own config
             return copy.deepcopy(candidate)
 
     def public(self) -> dict[str, Any]:

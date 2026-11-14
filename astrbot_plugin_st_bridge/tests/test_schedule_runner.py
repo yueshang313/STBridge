@@ -460,6 +460,7 @@ class RunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.kinds(), ["FakeRecord", "FakePlain"])
 
     async def test_sticker_uses_a_per_target_cooldown(self):
+        await self.plugin._core._emotion_store.update(lambda config: config["stickers"].update(cooldown=60))
         first, _ = await self.run_plan()
         self.assertEqual(first["sticker"], "sent")
         self.sends.clear()

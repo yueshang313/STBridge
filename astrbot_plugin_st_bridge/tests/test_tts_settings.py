@@ -27,9 +27,9 @@ class TtsDefaultsTests(unittest.TestCase):
             settings["common"],
             {
                 "auto_start": True, "stop_on_exit": True, "start_timeout": 180,
-                "tts_timeout_minutes": 5, "prob": 100.0, "text_limit": 0, "cooldown": 0,
-                "send_text_with_audio": False,
-                "split_messages": False, "split_interval": 1.5, "split_max": 3,
+                "tts_timeout_minutes": 5, "voice_wait_seconds": 60, "prob": 100.0, "text_limit": 0, "cooldown": 0,
+                "send_text_with_audio": True,
+                "split_messages": True, "split_interval": 1.5, "split_max": 3,
             },
         )
         irodori = settings["irodori"]

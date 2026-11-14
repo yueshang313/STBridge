@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import os
 import socket
 import sys
 import tempfile
@@ -254,6 +255,70 @@ class PlacementTests(TempCase):
                 self.service.install_plugin(self.ab)
         self.assertEqual(caught.exception.status, 500)
         self.assertEqual((self.plugin_dir() / "main.py").read_text(encoding="utf-8"), "# precious")
+
+    def test_a_locked_old_folder_stops_before_changing_anything_and_says_why(self):
+        self.service.install_plugin(self.ab)
+        (self.plugin_dir() / "main.py").write_text("# precious", encoding="utf-8")
+        real_replace = os.replace
+
+        def locked(source, target):
+            if Path(source) == self.plugin_dir():
+                raise PermissionError(13, "in use")
+            real_replace(source, target)
+
+        with patch("data.plugins.astrbot_plugin_st_bridge.st_bridge_core.install_service.os.replace", locked):
+            with self.assertRaises(InstallError) as caught:
+                self.service.install_plugin(self.ab)
+        self.assertEqual(caught.exception.status, 409)
+        self.assertIn("被占用", str(caught.exception))
+        self.assertEqual((self.plugin_dir() / "main.py").read_text(encoding="utf-8"), "# precious")
+        self.assertEqual([p.name for p in self.plugin_dir().parent.iterdir()], ["astrbot_plugin_st_bridge"])
+
+    def test_a_failure_after_the_old_folder_was_moved_aside_puts_it_back(self):
+        self.service.install_plugin(self.ab)
+        (self.plugin_dir() / "main.py").write_text("# precious", encoding="utf-8")
+        def boom(target):
+            raise OSError("link file not writable")
+
+        with self.assertRaises(InstallError) as caught:
+            self.service._place(self.addons / "astrbot_plugin_st_bridge", self.plugin_dir(), "astrbot-plugin", boom)
+        self.assertEqual(caught.exception.status, 500)
+        self.assertIn("已恢复原来的文件", str(caught.exception))
+        self.assertEqual((self.plugin_dir() / "main.py").read_text(encoding="utf-8"), "# precious")
+        self.assertEqual([p.name for p in self.plugin_dir().parent.iterdir()], ["astrbot_plugin_st_bridge"])
+
+    def test_old_folder_that_cannot_be_deleted_does_not_fail_the_install_and_is_tidied_next_time(self):
+        self.service.install_plugin(self.ab)
+        (self.plugin_dir() / "main.py").write_text("# old", encoding="utf-8")
+        real_remove = InstallService._remove_tree
+
+        def stuck(path):
+            if ".old-" in Path(path).name:
+                raise PermissionError(13, "in use")
+            real_remove(path)
+
+        with patch.object(InstallService, "_remove_tree", staticmethod(stuck)):
+            result = self.service.install_plugin(self.ab)
+        self.assertEqual((self.plugin_dir() / "main.py").read_text(), "# new plugin")
+        self.assertIn("重载插件", result["message"])
+        leftovers = [p for p in self.plugin_dir().parent.iterdir() if ".old-" in p.name]
+        self.assertEqual(len(leftovers), 1)
+        self.service.install_plugin(self.ab)  # the next install deletes it
+        self.assertEqual([p.name for p in self.plugin_dir().parent.iterdir()], ["astrbot_plugin_st_bridge"])
+
+    def test_uninstall_that_cannot_delete_says_why(self):
+        self.service.install_plugin(self.ab)
+        real_remove = InstallService._remove_tree
+
+        def stuck(path):
+            raise PermissionError(13, "in use")
+
+        with patch.object(InstallService, "_remove_tree", staticmethod(stuck)):
+            with self.assertRaises(InstallError) as caught:
+                self.service.uninstall_plugin(self.ab)
+        self.assertEqual(caught.exception.status, 409)
+        self.assertIn("被占用", str(caught.exception))
+        self.assertTrue((self.plugin_dir() / "main.py").exists())
 
     def test_uninstall_backs_up_then_removes_only_the_fixed_folder(self):
         self.service.install_plugin(self.ab)

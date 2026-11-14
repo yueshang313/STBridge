@@ -129,6 +129,7 @@ class TtsMixin:
         if tts is None:
             return None
         file_path = None
+        wait_seconds = 0.0
         try:
             tts_source_text = tts_source_text.strip() if isinstance(tts_source_text, str) else ""
             if not tts_source_text:
@@ -149,7 +150,13 @@ class TtsMixin:
                 logger.warning("[STBridge] TTS text exceeded the configured limit")
                 tts_text = tts_text[:text_limit]
 
-            audio_data = await tts.synthesize(tts_text, dict(profile) if isinstance(profile, dict) else None)
+            # The text must not wait forever for a slow or broken voice: past the limit it goes alone,
+            # and the late audio is dropped (wait_for cancels the synthesis; a service start goes on).
+            wait_seconds = float(common.get("voice_wait_seconds", 60))
+            audio_data = await asyncio.wait_for(
+                tts.synthesize(tts_text, dict(profile) if isinstance(profile, dict) else None),
+                timeout=wait_seconds,
+            )
 
             temp_dir = tts.temp_dir
             temp_dir.mkdir(parents=True, exist_ok=True)
@@ -165,6 +172,12 @@ class TtsMixin:
             asyncio.create_task(self._cleanup_tts_file(file_path, delay=60))
             file_path = None
             return segments
+        except asyncio.TimeoutError:
+            logger.warning(
+                "[STBridge] TTS wait timed out, sending the text only "
+                f"(VoiceWaitTimeout after {wait_seconds:g}s)"
+            )
+            return None
         except Exception as error:
             if isinstance(error, IrodoriRequestError):
                 logger.error(

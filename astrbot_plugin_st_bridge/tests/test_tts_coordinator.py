@@ -85,6 +85,65 @@ class ManagerConfigurationTests(CoordinatorCase):
         self.assertIsNone(manager._on_restart)
         self.assertEqual(manager.log_path, self.data_dir / "tts_service.log")
 
+    def _cache_repo(self, repo, files, *, commit="abc123", ref=True):
+        repo_dir = self.iro_dir / "model_cache" / "hub" / ("models--" + repo.replace("/", "--"))
+        snapshot = repo_dir / "snapshots" / commit
+        for name in files:
+            path = snapshot / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"x")
+        snapshot.mkdir(parents=True, exist_ok=True)
+        if ref:
+            (repo_dir / "refs").mkdir(parents=True, exist_ok=True)
+            (repo_dir / "refs" / "main").write_text(commit, encoding="utf-8")
+
+    def _cache_everything(self, checkpoint="Aratako/Irodori-TTS-v4.1-Small"):
+        self._cache_repo(checkpoint, ["model.safetensors", "tokenizer/tokenizer.json"])
+        self._cache_repo("Aratako/Semantic-DACVAE-Japanese-32dim", ["weights.pth"])
+        self._cache_repo("sony/silentcipher", ["44_1_khz/73999_iteration/hparams.yaml"])
+
+    def test_irodori_starts_offline_when_every_model_is_cached(self):
+        self._cache_everything()
+        env = self.make("irodori").manager()._extra_env
+        self.assertEqual(env["HF_HUB_OFFLINE"], "1")
+
+    def test_irodori_stays_online_when_anything_is_missing(self):
+        self.assertNotIn("HF_HUB_OFFLINE", self.make("irodori").manager()._extra_env)  # empty cache
+        for missing in ("Aratako/Irodori-TTS-v4.1-Small", "Aratako/Semantic-DACVAE-Japanese-32dim", "sony/silentcipher"):
+            with self.subTest(missing=missing):
+                import shutil
+                shutil.rmtree(self.iro_dir / "model_cache", ignore_errors=True)
+                self._cache_everything()
+                shutil.rmtree(self.iro_dir / "model_cache" / "hub" / ("models--" + missing.replace("/", "--")))
+                self.assertNotIn("HF_HUB_OFFLINE", self.make("irodori").manager()._extra_env)
+
+    def test_irodori_stays_online_when_a_download_was_cut_short(self):
+        self._cache_everything()
+        snapshot = self.iro_dir / "model_cache" / "hub" / "models--Aratako--Irodori-TTS-v4.1-Small" / "snapshots" / "abc123"
+        (snapshot / "model.safetensors").unlink()  # tokenizer arrived, the weights did not
+        self.assertNotIn("HF_HUB_OFFLINE", self.make("irodori").manager()._extra_env)
+        self._cache_everything()
+        (self.iro_dir / "model_cache" / "hub" / "models--sony--silentcipher" / "refs" / "main").unlink()
+        self.assertNotIn("HF_HUB_OFFLINE", self.make("irodori").manager()._extra_env)
+
+    def test_irodori_with_a_local_checkpoint_path_is_never_forced_offline(self):
+        self._cache_everything()
+        local = self.root / "my-checkpoint"
+        local.mkdir()
+        for checkpoint in (str(local), "D:\\models\\kotone", "./local/ckpt", "just-a-name"):
+            with self.subTest(checkpoint=checkpoint):
+                settings = self.settings("irodori")
+                settings["irodori"]["hf_checkpoint"] = checkpoint
+                self.assertNotIn("HF_HUB_OFFLINE", self.make(settings=settings).manager()._extra_env)
+
+    def test_irodori_checkpoint_other_than_the_default_needs_its_own_cache(self):
+        self._cache_everything()
+        settings = self.settings("irodori")
+        settings["irodori"]["hf_checkpoint"] = "someone/other-model"
+        self.assertNotIn("HF_HUB_OFFLINE", self.make(settings=settings).manager()._extra_env)
+        self._cache_repo("someone/other-model", ["model.safetensors", "tokenizer/t.json"])
+        self.assertEqual(self.make(settings=settings).manager()._extra_env["HF_HUB_OFFLINE"], "1")
+
     def test_gpt_sovits_manager_keeps_the_original_command_and_model_reset(self):
         tts = self.make("gpt_sovits")
         manager = tts.manager()

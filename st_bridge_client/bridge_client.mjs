@@ -20,7 +20,7 @@ function bridgeUrl(port = DEFAULT_BRIDGE_PORT) {
 const BRIDGE_URL = bridgeUrl();
 const MAX_REQUEST_ID_CHARS = 128;
 const MAX_REQUEST_TEXT_BYTES = 8 * 1024;
-const MAX_REPLY_BYTES = 32 * 1024;
+const MAX_REPLY_BYTES = 128 * 1024;  // keep equal to the core's DEFAULT_MAX_REPLY_BYTES
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 const STARTUP_PHASES = new Set([
     "identity_read",
@@ -397,6 +397,8 @@ export class BridgeClient {
         setTimeoutImpl = globalThis.setTimeout,
         clearTimeoutImpl = globalThis.clearTimeout,
         randomId = () => createAttemptId(),
+        // 101e: a fresh id per page load (never stored), so the core can tell ST pages apart.
+        clientId = null,
         onStatus = () => {},
         onDiagnostic = () => {},
         settingsStore = null,
@@ -410,7 +412,8 @@ export class BridgeClient {
             throw new TypeError("BridgeClient requires its browser and ST adapters");
         }
 
-        this.fetchImpl = fetchImpl;
+        // Chromium throws "Illegal invocation" when native fetch is called as a method of another object.
+        this.fetchImpl = fetchImpl.bind(globalThis);
         this.getContext = getContext;
         this.isGenerating = isGenerating;
         this.isLocallyBusy = isLocallyBusy;
@@ -423,6 +426,11 @@ export class BridgeClient {
         this.setTimeoutImpl = setTimeoutImpl.bind(globalThis);
         this.clearTimeoutImpl = clearTimeoutImpl.bind(globalThis);
         this.randomId = randomId;
+        // Sent as the `client_id` query parameter on every core call; the core lets only one
+        // page at a time receive messages (see http_protocol.ActivePageLease).
+        this.clientId = typeof clientId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(clientId)
+            ? clientId
+            : createAttemptId().replace(/[^A-Za-z0-9_-]/g, "");
         this.onStatus = onStatus;
         this.onDiagnostic = onDiagnostic;
         this.getVariableApi = getVariableApi;
@@ -774,6 +782,11 @@ export class BridgeClient {
             const pending = await this._request("/v1/requests/pending");
             if (pending === null) {
                 this._status(this.running ? "polling" : "idle");
+                return false;
+            }
+            if (pending && pending.active === false) {
+                // Another ST page is the one receiving messages; this page only keeps asking.
+                this._status("other_client_active");
                 return false;
             }
             if (!pending || typeof pending.request_id !== "string"
@@ -1418,7 +1431,11 @@ export class BridgeClient {
 
         let response;
         try {
-            response = await this.fetchImpl(`${this.bridgeUrl}${path}`, options);
+            const separator = path.includes("?") ? "&" : "?";
+            response = await this.fetchImpl(
+                `${this.bridgeUrl}${path}${separator}client_id=${encodeURIComponent(this.clientId)}`,
+                options,
+            );
         } catch (error) {
             throw new BridgeClientError(
                 error?.name === "AbortError" ? "network_timeout" : "network_error",

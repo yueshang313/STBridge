@@ -241,6 +241,7 @@ class PluginStartTests(unittest.IsolatedAsyncioTestCase):
         config["network"] = {"st_port": 12000, "bridge_port": 12001, "console_port": 12002}
         captured = await self.start_plugin(config)
         self.assertEqual(captured["http_config"].allowed_origin, "http://localhost:12000")
+        self.assertEqual(captured["http_config"].extra_origins, ("http://127.0.0.1:12000",))
         self.assertEqual(captured["http_config"].listen_port, 12001)
         self.assertEqual(captured["http_config"].listen_host, "127.0.0.1")
         self.assertEqual(captured["console_port"], 12002)

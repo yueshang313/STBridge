@@ -67,6 +67,165 @@ class TtsConsoleTests(unittest.IsolatedAsyncioTestCase):
     def saved_config(self):
         return json.loads((self.data_dir / "config.json").read_text(encoding="utf-8"))
 
+    @staticmethod
+    def _wav(seconds=0.5, rate=8000):
+        import io
+        import wave
+
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(rate)
+            handle.writeframes(b"\x00\x00" * int(seconds * rate))
+        return buffer.getvalue()
+
+    async def test_tts_test_synthesizes_one_sentence_and_reports_it(self):
+        seen = {}
+
+        async def post(payload):
+            seen["payload"] = payload
+            return self._wav(0.5)
+
+        self.tts._post_irodori = post
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertEqual(status, 200)
+        self.assertEqual((body["ok"], body["engine"], body["duration_seconds"]), (True, "irodori", 0.5))
+        self.assertGreater(body["bytes"], 100)
+        self.assertIn("elapsed_ms", body)
+        self.assertEqual(seen["payload"]["input"].rstrip("😊😆🫣😲🤔😠🥺"), "こんにちは、音声のテストです。")
+        # a text, a character and an emotion are accepted; the default character has the emotion's caption
+        status, body = await self.request("/api/tts/test", "POST", {"text": "テスト", "emotion": "开心"})
+        self.assertEqual((status, body["emotion"]), (200, "开心"))
+        self.assertIn("caption", seen["payload"]["irodori"])
+
+    async def test_tts_test_returns_the_audio_only_when_asked(self):
+        import base64
+
+        wav = self._wav(0.25)
+
+        async def post(payload):
+            return wav
+
+        self.tts._post_irodori = post
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertNotIn("audio_base64", body)  # the default reply is unchanged (the selftest depends on it)
+        self.assertNotIn("content_type", body)
+        status, body = await self.request("/api/tts/test", "POST", {"return_audio": True})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["content_type"], "audio/wav")
+        self.assertEqual(base64.b64decode(body["audio_base64"]), wav)
+        status, _ = await self.request("/api/tts/test", "POST", {"return_audio": "yes"})
+        self.assertEqual(status, 400)
+
+    async def test_tts_test_can_use_unsaved_emotion_fields_for_one_synthesis(self):
+        seen = {}
+
+        async def post(payload):
+            seen["payload"] = payload
+            return self._wav(0.25)
+
+        self.tts._post_irodori = post
+        before = self.saved_config()
+        status, body = await self.request("/api/tts/test", "POST", {
+            "emotion": "开心", "emotion_profile": {"caption": "臨時のキャプション", "emoji": "😆"},
+        })
+        self.assertEqual(status, 200, body)
+        self.assertEqual(seen["payload"]["irodori"]["caption"], "臨時のキャプション")
+        self.assertTrue(seen["payload"]["input"].startswith("😆"))
+        # Nothing was written, and the next plain call uses the saved caption again.
+        self.assertEqual(self.saved_config(), before)
+        await self.request("/api/tts/test", "POST", {"emotion": "开心"})
+        self.assertNotEqual(seen["payload"]["irodori"]["caption"], "臨時のキャプション")
+
+    async def test_tts_test_checks_unsaved_emotion_fields_like_a_save(self):
+        bad = (
+            {"emotion_profile": {"caption": "x"}},
+            {"emotion": "开心", "emotion_profile": "x"},
+            {"emotion": "开心", "emotion_profile": {"nonsense": 1}},
+            {"emotion": "开心", "emotion_profile": {"top_k": 0}},
+            {"emotion": "开心", "emotion_profile": {"caption": "x" * 301}},
+            {"emotion": "开心", "emotion_profile": {"emoji": "a\nb"}},
+        )
+        for payload in bad:
+            status, _ = await self.request("/api/tts/test", "POST", payload)
+            self.assertEqual(status, 400, payload)
+
+    async def test_tts_test_failure_during_the_cooldown_says_how_long(self):
+        self.host.exit_code = 2
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertEqual(status, 502)
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertEqual((status, body["error"]), (502, "ServiceStartError"))
+        self.assertGreater(body["cooldown_seconds"], 0)
+
+    async def test_tts_test_reports_errors_without_leaking_details(self):
+        async def post(payload):
+            raise RuntimeError("secret D-path")
+
+        self.tts._post_irodori = post
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertEqual((status, body["ok"], body["error"]), (502, False, "RuntimeError"))
+        self.assertNotIn("secret", json.dumps(body))
+        from data.plugins.astrbot_plugin_st_bridge.st_bridge_core.tts_service import ServiceStartError
+
+        async def not_ready():
+            raise ServiceStartError("service did not start")
+
+        self.tts.ensure_service_ready = not_ready
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertEqual((status, body["error"]), (502, "ServiceStartError"))
+
+    async def test_tts_test_failure_carries_the_http_status_and_error_type_but_no_path(self):
+        from data.plugins.astrbot_plugin_st_bridge.st_bridge_core.tts_clients import IrodoriRequestError
+
+        async def irodori_400(payload):
+            raise IrodoriRequestError(400, "invalid_request_error")
+
+        self.tts._post_irodori = irodori_400
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertEqual((status, body["ok"], body["error"]), (502, False, "IrodoriRequestError"))
+        self.assertEqual((body["status"], body["error_type"]), (400, "invalid_request_error"))
+
+        import httpx
+
+        async def sovits_500(payload):
+            raise httpx.HTTPStatusError(
+                "Server error for url D:/secret/model.pth",
+                request=httpx.Request("POST", "http://127.0.0.1:9880/"),
+                response=httpx.Response(500),
+            )
+
+        self.tts._post_irodori = sovits_500
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertEqual((status, body["error"], body["status"]), (502, "HTTPStatusError", 500))
+        self.assertNotIn("error_type", body)
+        self.assertNotIn("secret", json.dumps(body))
+
+        async def plain(payload):
+            raise RuntimeError("x")
+
+        self.tts._post_irodori = plain
+        status, body = await self.request("/api/tts/test", "POST")
+        self.assertNotIn("status", body)
+
+    async def test_tts_test_validates_the_input(self):
+        for payload in ({"text": ""}, {"text": "あ" * 201}, {"text": 5}, {"emotion": "a/b"}):
+            status, _ = await self.request("/api/tts/test", "POST", payload)
+            self.assertEqual(status, 400, payload)
+        status, _ = await self.request("/api/tts/test", "POST", {"character": "不存在"})
+        self.assertEqual(status, 404)
+
+    async def test_tts_test_is_unavailable_without_a_tts_coordinator(self):
+        port = _unused_loopback_port()
+        service = ConsoleService(create_console_app(self.store), port=port)
+        await service.start()
+        try:
+            async with self.client.post(f"http://127.0.0.1:{port}/api/tts/test") as response:
+                self.assertEqual(response.status, 503)
+        finally:
+            await service.stop()
+
     async def test_get_returns_settings_and_current_engine(self):
         status, body = await self.request("/api/tts")
         self.assertEqual(status, 200)
@@ -206,7 +365,7 @@ class ConsoleFrontendStructureTests(unittest.IsolatedAsyncioTestCase):
 
         page = (self.FRONTEND / "index.html").read_text(encoding="utf-8")
         nav = set(re.findall(r'class="nav-item[^"]*" data-page="([a-z]+)"', page))
-        self.assertEqual(nav, {"overview", "install", "voice", "emotions", "stickers", "schedule", "sing", "affinity", "injection", "system"})
+        self.assertEqual(nav, {"overview", "install", "voice", "emotions", "stickers", "schedule", "sing", "affinity", "injection", "connect", "system"})
         for name in nav:
             self.assertIn(f'<section id="{name}" class="page', page)
 

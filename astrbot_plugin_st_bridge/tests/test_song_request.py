@@ -73,7 +73,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(
             {key: settings[key] for key in ("enabled", "owner_min_affinity", "group_min_affinity", "refuse_percent",
                                            "list_timeout_seconds", "per_source")},
-            {"enabled": True, "owner_min_affinity": 0, "group_min_affinity": 21, "refuse_percent": 0,
+            {"enabled": True, "owner_min_affinity": 0, "group_min_affinity": 0, "refuse_percent": 0,
              "list_timeout_seconds": 180, "per_source": 5},
         )
         self.assertEqual(len(settings["accept_texts"]), 2)

@@ -1,12 +1,12 @@
 # STBridge
 
-**English summary.** STBridge connects QQ (through NapCat or AstrBot) to [SillyTavern](https://github.com/SillyTavern/SillyTavern), so a SillyTavern character can chat with you and your friends on QQ, with optional voice replies, stickers, song covers (RVC), scheduled messages and a local web console. It runs on **Windows only**, ships as a ready-to-run zip with its own embedded Python, and is released under the **AGPL-3.0**. The documentation is written in Chinese; start with [docs/quickstart.md](docs/quickstart.md).
+**English summary.** STBridge connects QQ (through AstrBot with the official QQ bot API — recommended — or NapCat) to [SillyTavern](https://github.com/SillyTavern/SillyTavern), so a SillyTavern character can chat with you and your friends on QQ, with optional voice replies, stickers, song covers (RVC), scheduled messages and a local web console. It runs on **Windows only**, ships as a ready-to-run zip with its own embedded Python, and is released under the **AGPL-3.0**. The documentation is written in Chinese; start with [docs/quickstart.md](docs/quickstart.md).
 
 ---
 
 STBridge 把 SillyTavern（下面简称 ST）里的角色带到 QQ 上。你在 QQ 上给机器人发消息，STBridge 把消息转给 ST，由角色写好回复，再发回 QQ。
 
-QQ 这一侧有两种接法，选一种就行：NapCat（用一个 QQ 小号当机器人），或者 AstrBot（QQ 官方机器人）。
+QQ 这一侧有两种接法，选一种就行：推荐用 AstrBot 接 QQ 官方机器人；也可以用 NapCat，拿一个 QQ 小号当机器人，但它不是官方程序，有封号风险，上游也已经停止维护。
 
 默认角色是《学园偶像大师》里的藤田琴音。想换成别的角色，请看[换角色指南](docs/character.md)。
 
@@ -19,18 +19,18 @@ QQ 这一侧有两种接法，选一种就行：NapCat（用一个 QQ 小号当�
 - **定时消息**：早安、晚安、提醒吃饭喝水，到点由角色用自己的口吻发给你。
 - **主动搭话**：你一段时间没说话，角色会主动来找你。每天有次数上限，也有免打扰时间。
 - **排队**：好几个人同时说话时，按先来后到回复；同一个人在排队期间连发的几条，会合成一条处理。
-- **网页控制台**：在浏览器里改几乎所有设置，不用碰配置文件。
+- **网页控制台**：在浏览器里改几乎所有设置，不用碰配置文件。第一次用有“开始使用”清单带着走，按 Ctrl+K 能搜任何设置，出了问题能一键导出不含隐私的诊断包。
 - **总预设**：把整套设置存成预设，随时切换，也能导出给别人。
 
 ## 工作方式
 
 ```
-  QQ ── NapCat（QQ 小号）──┐
-                           ├─→  STBridge 核心  ←→  ST 扩展  ←→  SillyTavern  ←→  模型 API
-  QQ ── AstrBot 插件 ──────┘     （start.bat）     （st_bridge_client）
-                                     │
-                                     ├─ 可选：Irodori TTS 或 GPT-SoVITS（语音）
-                                     └─ 可选：RVC（翻唱）
+  QQ ── AstrBot 插件（QQ 官方机器人）──┐
+                                       ├─→  STBridge 核心  ←→  ST 扩展  ←→  SillyTavern  ←→  模型 API
+  QQ ── NapCat（QQ 小号，可选）────────┘     （start.bat）     （st_bridge_client）
+                                                 │
+                                                 ├─ 可选：Irodori TTS 或 GPT-SoVITS（语音）
+                                                 └─ 可选：RVC（翻唱）
 ```
 
 - **STBridge 核心**：独立运行的主程序，自带 Python，双击 `start.bat` 就能启动。控制台也由它提供。
@@ -41,23 +41,23 @@ QQ 这一侧有两种接法，选一种就行：NapCat（用一个 QQ 小号当�
 
 - **只支持 Windows。**
 - **SillyTavern**：需要你自己装好，配好模型 API 和角色。我们在 1.19.0 上测试过。
-- **NapCat 或 AstrBot**：选一个，自己装好并登录。
+- **AstrBot 或 NapCat**：选一个，自己装好并登录。推荐 AstrBot 加 QQ 官方机器人。
 - **语音和翻唱（可选）**：语音用 Irodori TTS 或 GPT-SoVITS，翻唱用 RVC。这些程序和模型都要你自己准备。
-- **酒馆助手（可选）**：也叫 TavernHelper 或 JS-Slash-Runner。不装也能正常使用；装了以后，STBridge 会把好感度同步写进 ST 的 `stat_data` 变量，方便你在自己的世界书或 MVU 里使用。
+- **酒馆助手（可选）**：也叫 TavernHelper 或 JS-Slash-Runner。不装也能正常使用；装了以后，STBridge 会把好感度同步写进 ST 的 `stat_data` 变量，方便你在自己的世界书或 MVU 里使用。很多预设带着酒馆助手的脚本，要用这样的预设的话，先装酒馆助手，再导入预设。
 - **模型 API**：在 ST 里配置。STBridge 本身不提供，也不转发任何模型服务。
 
 ## 下载和快速开始
 
-1. 在本仓库的 Releases 页面下载最新的 `STBridge-<版本号>.zip`。
+1. 在本仓库的 Releases 页面下载最新的 `STBridge-<版本号>.zip`。要下载 Releases 里的这个 zip。仓库首页绿色“Code”按钮下载的是源代码，没有自带的 Python，双击跑不起来。
 2. 解压后双击 `start.bat`，浏览器会自动打开控制台。
-3. 接下来填路径、装 ST 扩展、连 QQ、设主人，跟着[快速开始](docs/quickstart.md)一步步做就行。
+3. 接下来填路径、装 ST 扩展、连 QQ、认领主人，跟着[快速开始](docs/quickstart.md)一步步做就行，控制台“总览”页的“开始使用”清单也会带着你走。
 
 ## 风险与声明
 
 使用前，请花一分钟读完这几条：
 
 - **私聊和群聊用的是同一个 ST 聊天。** 群友的话和你的私聊会进同一段聊天记录，所以角色有可能在群里说漏私聊里的事，比如提到你们私下的约定。STBridge 不会替你做这层隔离，需要你在 ST 的预设里自己加规则，比如“私下的事不要在群里提”。
-- **NapCat 不是腾讯官方的客户端。** 它用的是第三方实现的协议，账号有被限制甚至封禁的风险。请用小号，别用你的主号。
+- **NapCat 不是腾讯官方的客户端。** 它用的是第三方实现的协议，账号有被限制甚至封禁的风险，上游项目也已经停止维护，QQ 更新后可能就用不了了。真要用请用小号，别用你的主号。STBridge 不提供 NapCat 或 QQ 的安装包。
 - **聊天内容会发给你在 ST 里配置的模型服务商。** 会发哪些内容、对方怎么处理，取决于你用的是哪家服务商。
 - **控制台只能在本机访问（127.0.0.1），而且没有密码。** 请不要用端口转发、内网穿透之类的方式把它暴露到公网上。
 - **版权。** 这是一个爱好者项目，和角色、歌曲的版权方都没有关系。仓库里没有任何角色素材，角色卡、参考音频、表情包、RVC 和 LoRA 模型都需要你自己准备。默认角色藤田琴音出自《学园偶像大师》，版权归原权利人所有。翻唱和点歌生成的音频，版权责任由使用者自己承担。

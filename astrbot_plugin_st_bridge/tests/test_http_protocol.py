@@ -702,5 +702,65 @@ class NoTokenTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(server.runner._server)
 
 
+class LoopbackAliasOriginTests(unittest.IsolatedAsyncioTestCase):
+    """101d: ST opened as http://127.0.0.1:<port> must work as well as http://localhost:<port>."""
+
+    LOCALHOST = "http://localhost:11451"
+    LOOPBACK = "http://127.0.0.1:11451"
+
+    async def asyncSetUp(self):
+        config = HttpProtocolConfig(
+            allowed_origin=self.LOCALHOST,
+            extra_origins=(self.LOOPBACK,),
+            listen_port=11452,
+        )
+        app = create_open_app(RequestStateManager(timeout_seconds=10), config)
+        self.server = TestServer(app, host="127.0.0.1")
+        self.client = TestClient(self.server)
+        await self.client.start_server()
+
+    async def asyncTearDown(self):
+        await self.client.close()
+
+    async def test_both_aliases_pass_and_the_matching_origin_is_echoed(self):
+        for origin in (self.LOCALHOST, self.LOOPBACK):
+            with self.subTest(origin=origin):
+                response = await self.client.get("/v1/health", headers={"Origin": origin})
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers["Access-Control-Allow-Origin"], origin)
+                preflight = await self.client.options(
+                    "/v1/session/ready",
+                    headers={
+                        "Origin": origin,
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "content-type",
+                    },
+                )
+                self.assertEqual(preflight.status, 204)
+                self.assertEqual(preflight.headers["Access-Control-Allow-Origin"], origin)
+
+    async def test_other_ports_and_hosts_are_still_denied(self):
+        for origin in (
+            "http://localhost:11999",
+            "http://127.0.0.1:11999",
+            "http://127.0.0.2:11451",
+            "http://[::1]:11451",
+            "https://127.0.0.1:11451",
+            "http://attacker.example",
+        ):
+            with self.subTest(origin=origin):
+                response = await self.client.get("/v1/health", headers={"Origin": origin})
+                self.assertEqual(response.status, 403)
+                self.assertNotIn("Access-Control-Allow-Origin", response.headers)
+        missing = await self.client.get("/v1/health")
+        self.assertEqual(missing.status, 403)
+
+    def test_extra_origins_must_be_exact_loopback_origins(self):
+        with self.assertRaises(ValueError):
+            HttpProtocolConfig(allowed_origin=self.LOCALHOST, extra_origins=("*",), listen_port=11452)
+        with self.assertRaises(ValueError):
+            HttpProtocolConfig(allowed_origin=self.LOCALHOST, extra_origins=("http://evil.example",), listen_port=11452)
+
+
 if __name__ == "__main__":
     unittest.main()

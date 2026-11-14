@@ -196,3 +196,10 @@
     min-width: 0;
     overflow-wrap: anywhere;
 }
+
+/* 101e: another ST page is the one connected to the core */
+.st-bridge-client-settings #st-bridge-client-status.st-bridge-other-page {
+    border-color: #d9534f;
+    background: rgba(217, 83, 79, 0.15);
+    font-weight: 600;
+}

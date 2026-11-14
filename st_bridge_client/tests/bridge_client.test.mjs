@@ -332,6 +332,46 @@ test("completes one claimed request through native generation and submits its re
     assert.equal(harness.eventSource.listenerCount(EVENT_TYPES.GENERATION_STOPPED), 0);
 });
 
+// Chromium's native fetch throws "Illegal invocation" unless `this` is the window.
+function strictFetchFor(bridge) {
+    return function strictFetch(url, options) {
+        if (this !== globalThis) {
+            throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+        }
+        return bridge.fetchImpl(url, options);
+    };
+}
+
+test("polls normally with an injected fetch that insists on this === globalThis", async () => {
+    const bridge = createMockBridge();
+    bridge.addRequest("req-strict-fetch", "hello strict");
+    bridge.fetchImpl = strictFetchFor({ fetchImpl: bridge.fetchImpl });
+    const harness = createHarness({ bridge });
+
+    assert.equal(await harness.client.pollOnce(), true);
+    assert.equal(bridge.jobs.get("req-strict-fetch").status, "SUCCEEDED");
+});
+
+test("the default fetch path also survives a strict globalThis.fetch", async () => {
+    const bridge = createMockBridge();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = strictFetchFor(bridge);
+    try {
+        const client = new BridgeClient({
+            getContext: () => ({}),
+            isGenerating: () => false,
+            sendMessageAsUser: async () => ({}),
+            generate: async () => "x",
+        });
+        // Called as a method, like the real client does at every request.
+        const response = await client.fetchImpl("http://127.0.0.1:11452/v1/health", {});
+        assert.ok(response.status !== undefined);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+    assert.ok(bridge.calls.some((call) => call.path === "/v1/health"));
+});
+
 test("recovery gate does not touch the ST chat", async () => {
     const bridge = createMockBridge({ recovered: false });
     bridge.addRequest("req-recovery", "do not append");
@@ -2235,4 +2275,45 @@ test("R5: fetchInjection reads the entry list and backupPreset posts the whole p
     assert.ok(!("Authorization" in post.headers));
     bridge.injection.failBackup = true;
     await assert.rejects(() => harness.client.backupPreset("x", {}), (error) => error instanceof BridgeClientError && error.code === "backup_failed" && error.status === 500);
+});
+
+// ---- 101e: client_id and the single on-duty page ----
+
+test("every core call carries the same random client_id, a different one per page load", async () => {
+    const bridge = createMockBridge();
+    bridge.addRequest("req-cid", "hello");
+    const first = createHarness({ bridge });
+    assert.equal(await first.client.pollOnce(), true);
+    const ids = new Set(bridge.calls.map((call) => new URL(call.url).searchParams.get("client_id")));
+    assert.equal(ids.size, 1);
+    const [id] = [...ids];
+    assert.match(id, /^[A-Za-z0-9_-]{8,64}$/);
+    assert.ok(bridge.calls.length >= 4);
+
+    const second = createHarness({ bridge: createMockBridge() });
+    assert.notEqual(second.client.clientId, first.client.clientId);
+});
+
+test("a page the core says is not on duty claims nothing and shows the notice state", async () => {
+    const bridge = createMockBridge();
+    bridge.addRequest("req-inactive", "hello");
+    const inner = bridge.fetchImpl;
+    bridge.fetchImpl = async (url, options) => (
+        new URL(url).pathname === "/v1/requests/pending"
+            ? httpResponse(200, { active: false, reason: "other_client_active" })
+            : inner(url, options)
+    );
+    const harness = createHarness({ bridge });
+    assert.equal(await harness.client.pollOnce(), false);
+    assert.ok(harness.statuses.some((status) => status.state === "other_client_active"));
+    assert.equal(bridge.jobs.get("req-inactive").status, "PENDING");
+    assert.ok(!bridge.calls.some((call) => call.path.endsWith("/claim")));
+});
+
+test("the notice states have readable texts", async () => {
+    const { statusTextForState } = await import("../status_messages.mjs");
+    for (const state of ["other_client_active", "not_active_client", "not_claim_owner", "reply_too_large"]) {
+        assert.notEqual(statusTextForState(state), "桥接状态已更新", state);
+    }
+    assert.match(statusTextForState("other_client_active"), /另一个 ST 页面/);
 });

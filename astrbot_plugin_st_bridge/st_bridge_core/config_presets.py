@@ -34,7 +34,7 @@ MAX_IMPORT_BYTES = 1024 * 1024
 MAX_AUTO_PRESETS = 5
 MAX_PRESETS = 100
 # Sections that stay local to this machine: a preset neither carries them out nor changes them.
-EXCLUDED_SECTIONS = ("network", "owner", "chat_platform", "install", "texts_notice", "auth_token")
+EXCLUDED_SECTIONS = ("network", "owner", "chat_platform", "install", "console", "texts_notice", "auth_token")
 EXCLUDED_COVER_FIELDS = ("music_api_key", "rvc_root")
 # The folders of the local TTS / RVC installs are machine-local too: a preset neither carries nor changes them.
 EXCLUDED_TTS_FIELDS = (
@@ -131,6 +131,8 @@ def normalize_config(preset_config: Any, local_config: dict[str, Any]) -> dict[s
             candidate["chat_platform"] = copy.deepcopy(local_config["chat_platform"])
         if isinstance(local_config.get("install"), dict):
             candidate["install"] = copy.deepcopy(local_config["install"])
+        if isinstance(local_config.get("console"), dict):
+            candidate["console"] = copy.deepcopy(local_config["console"])
         # A preset from before R4b may carry these paths: they are dropped, this machine's own are kept.
         _drop_local_paths(candidate)
         fill_config_defaults(candidate)

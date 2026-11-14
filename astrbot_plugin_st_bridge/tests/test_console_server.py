@@ -667,7 +667,7 @@ class PluginConsoleLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 )
                 await self.assert_bridge_unaffected(plugin)
 
-    async def test_corrupt_console_config_does_not_affect_bridge(self):
+    async def test_corrupt_console_config_is_set_aside_and_the_console_still_starts(self):
         data_dir = self.data_root / "plugin_data" / "astrbot_plugin_st_bridge"
         data_dir.mkdir(parents=True)
         (data_dir / "config.json").write_bytes(b"{ invalid json\n")
@@ -675,12 +675,14 @@ class PluginConsoleLifecycleTests(unittest.IsolatedAsyncioTestCase):
         bridge_patch, console_patch, tools_patch = self.patches(_unused_loopback_port())
         with bridge_patch, console_patch, tools_patch:
             await plugin.initialize()
-            self.assertEqual(
-                self.module.test_logger.errors,
-                ["[STBridge] Console unavailable (ConsoleStartFailed: RuntimeError)"],
-            )
-            await self.assert_bridge_unaffected(plugin)
-        self.assertEqual((data_dir / "config.json").read_bytes(), b"{ invalid json\n")
+            # 101e: no longer a startup failure; the broken file is renamed and the defaults are used.
+            self.assertEqual(self.module.test_logger.errors, [])
+            self.assertEqual(plugin._core._emotion_store.recovery["used"], "default")
+            broken = list(data_dir.glob("config.json.broken-*"))
+            self.assertEqual([path.read_bytes() for path in broken], [b"{ invalid json\n"])
+            self.assertIsNotNone(plugin._core._console_service)
+            self.assertEqual(plugin._core._http_service.state, HttpServiceState.RUNNING)
+            await plugin.terminate()
 
     async def test_data_dir_failure_does_not_affect_bridge_or_log_secrets(self):
         def failing_get_data_dir(name):

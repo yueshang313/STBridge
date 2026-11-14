@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 import threading
@@ -13,6 +14,13 @@ from uuid import uuid4
 
 from .emotion_config import is_safe_path_segment
 from .st_injection import validate_macros
+
+
+logger = logging.getLogger(__name__)
+
+# A "generation not confirmed finished" mark whose request expired this long ago is dropped by
+# create_request on its own, so a page that never comes back cannot block the bridge for good.
+UNCONFIRMED_GUARD_MAX_AGE_SECONDS = 600.0
 
 
 class RequestStatus(str, Enum):
@@ -233,6 +241,7 @@ class RequestStateManager:
         with self._lock:
             now = self._now()
             self._expire_active_locked(now)
+            self._drop_aged_guard_locked(now)
             if self._active_request_id is not None:
                 raise RequestBusyError("an active request already exists")
             if self._unconfirmed_generation_id is not None:
@@ -260,6 +269,59 @@ class RequestStateManager:
             )
             self._active_request_id = request_id
             return self._store_locked(request)
+
+    def _drop_aged_guard_locked(self, now: float) -> None:
+        """Forget an unconfirmed-generation mark whose request ended long ago (nobody confirmed it)."""
+        marked = self._unconfirmed_generation_id
+        if marked is None:
+            return
+        request = self._requests.get(marked)
+        if request is None:
+            self._unconfirmed_generation_id = None
+            return
+        if (
+            request.status in {RequestStatus.PENDING, RequestStatus.CLAIMED}
+            or now < request.expires_at + UNCONFIRMED_GUARD_MAX_AGE_SECONDS
+        ):
+            return
+        self._unconfirmed_generation_id = None
+        logger.warning("[STBridge] Cleared a stale 'generation unconfirmed' mark (aged out)")
+
+    def clear_stale_generation_guard(
+        self,
+        only_if: Callable[[str], bool] | None = None,
+    ) -> str | None:
+        """Drop the unconfirmed-generation mark if its request has ended (a new ST page reported in).
+
+        Returns the cleared request id, or None when there was nothing to clear, the request
+        is still claimed (a live page may still be generating it), or `only_if(request_id)` says no.
+        """
+        with self._lock:
+            self._expire_active_locked(self._now())
+            marked = self._unconfirmed_generation_id
+            if marked is None:
+                return None
+            request = self._requests.get(marked)
+            if request is not None and request.status in {
+                RequestStatus.PENDING,
+                RequestStatus.CLAIMED,
+            }:
+                return None
+            if only_if is not None and not only_if(marked):
+                return None
+            self._unconfirmed_generation_id = None
+            logger.warning("[STBridge] Cleared a stale 'generation unconfirmed' mark (new ST page)")
+            return marked
+
+    def has_claimed_request(self) -> bool:
+        """True while a request is claimed by an ST page and not yet finished."""
+        with self._lock:
+            self._expire_active_locked(self._now())
+            request_id = self._active_request_id
+            return (
+                request_id is not None
+                and self._requests[request_id].status == RequestStatus.CLAIMED
+            )
 
     def get_request(self, request_id: str) -> BridgeRequest:
         """Return a snapshot and apply lazy expiration if its deadline passed."""

@@ -387,7 +387,7 @@ class ReleaseFromScratchTests(unittest.TestCase):
     @timed
     def test_04_the_old_plugin_data_is_previewed_and_imported_read_only(self):
         preview = self.api("POST", "/api/install/import/preview", {"source": str(self.old)})
-        self.assertEqual({item["name"] for item in preview["items"]}, {"config.json", "affinity.json", "connector_token", "onebot_token", "audio"})
+        self.assertEqual({item["name"] for item in preview["items"]}, {"config.json", "affinity.json", "affinity.json.bak", "connector_token", "onebot_token", "audio"})
         self.assertEqual(set(preview["skipped"]), {"logs", "temp_audio"})
         self.assertGreaterEqual(preview["path_references"], 3)
         self.assertTrue({"config.json", "connector_token", "onebot_token"} <= set(preview["replaces"]), preview["replaces"])

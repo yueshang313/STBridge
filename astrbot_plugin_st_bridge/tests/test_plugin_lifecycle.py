@@ -1530,7 +1530,7 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
             request = await _wait_for_request(plugin._core._request_state_manager)
             plugin._core._request_state_manager.claim_request(request.request_id, "client-attempt-timeout")
             plugin._core._request_state_manager.mark_generation_started(request.request_id)
-            now[0] += 1000.0  # past the request's deadline
+            now[0] += 200.0  # past the request's deadline (but inside the 10-minute auto-clear of the unconfirmed mark)
             timeout_results = await asyncio.wait_for(processing, 60)
             self.assertEqual(
                 [result.text for result in timeout_results],

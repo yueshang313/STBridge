@@ -471,7 +471,7 @@ class SplitSongOrderTests(DeliveryBase):
 class ConfigTests(unittest.TestCase):
     def test_defaults(self):
         common = default_tts_settings()["common"]
-        self.assertEqual((common["split_messages"], common["split_interval"], common["split_max"]), (False, 1.5, 3))
+        self.assertEqual((common["split_messages"], common["split_interval"], common["split_max"]), (True, 1.5, 3))
 
     def merged(self, **common):
         settings = default_tts_settings()
@@ -483,7 +483,7 @@ class ConfigTests(unittest.TestCase):
         for key in ("split_messages", "split_interval", "split_max"):
             del settings["common"][key]
         common = validate_tts_settings(settings)["common"]
-        self.assertEqual((common["split_messages"], common["split_interval"], common["split_max"]), (False, 1.5, 3))
+        self.assertEqual((common["split_messages"], common["split_interval"], common["split_max"]), (True, 1.5, 3))
 
     def test_ranges(self):
         for field, value in (

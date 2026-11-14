@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 
 # Bumped whenever the core's behavior changes in a way a connector has to match (checked in the hello).
-CORE_VERSION = "1.0.0"
+CORE_VERSION = "1.0.1"
 PROTOCOL_VERSION = 1
 # The exit code of a core that stops because the console asked for a restart; start.bat starts it again on this code.
 RESTART_EXIT_CODE = 75

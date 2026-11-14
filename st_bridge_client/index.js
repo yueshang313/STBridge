@@ -202,6 +202,11 @@ function renderBridgeStatus({ state, requestId = null } = {}) {
         output.textContent = requestId
             ? `${label}（request_id: ${requestId}）${suffix}`
             : `${label}${suffix}`;
+        // 101e: make "another page is on duty" impossible to miss.
+        output.classList?.toggle?.(
+            "st-bridge-other-page",
+            state === "other_client_active" || state === "not_active_client",
+        );
     }
 
     const bindButton = document.getElementById(BRIDGE_BIND_ID);
@@ -765,7 +770,7 @@ function createPanel() {
     portRow.appendChild(portSave);
     const portNote = document.createElement("span");
     portNote.className = "st-bridge-note";
-    portNote.textContent = "要和 STbridge 控制台（11453）“系统 › 端口”里的 bridge 端口一致；改完立即生效，只连 127.0.0.1。";
+    portNote.textContent = "要和 STbridge 控制台（11453）“系统 › 常规”的“端口”卡片里的 bridge 端口一致；改完立即生效，只连 127.0.0.1。";
     portRow.appendChild(portNote);
     bridgeArea.appendChild(portRow);
 

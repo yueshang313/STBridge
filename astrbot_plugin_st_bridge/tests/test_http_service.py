@@ -102,6 +102,29 @@ class HttpServiceLifecycleTests(unittest.IsolatedAsyncioTestCase):
             await service.stop()
             await client.close()
 
+    async def test_successful_requests_are_not_access_logged_but_errors_are(self):
+        port = _unused_loopback_port()
+        service, _gate = _service(port)
+        client = ClientSession(connector=TCPConnector(force_close=True))
+        url = f"http://127.0.0.1:{port}"
+        try:
+            await service.start()
+            # /v1/health answers 200 whatever the gate state is.
+            with self.assertNoLogs("aiohttp.access", level="DEBUG"):
+                response = await client.get(f"{url}/v1/health", headers={"Origin": ORIGIN})
+                self.assertLess(response.status, 400)
+            with self.assertLogs("aiohttp.access", level="INFO") as captured:
+                response = await client.get(
+                    f"{url}/v1/no-such-route?secret=1", headers={"Origin": ORIGIN, "X-Secret": "hunter2"}
+                )
+                self.assertGreaterEqual(response.status, 400)
+            self.assertEqual(len(captured.records), 1)
+            line = captured.records[0].getMessage()
+            self.assertEqual(line, f"GET /v1/no-such-route {response.status}")
+        finally:
+            await service.stop()
+            await client.close()
+
     async def test_occupied_port_fails_without_fallback_or_leaked_runner(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as holder:
             holder.bind(("127.0.0.1", 0))

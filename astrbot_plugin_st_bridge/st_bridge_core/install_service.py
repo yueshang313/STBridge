@@ -36,6 +36,10 @@ PLUGIN_DIR_NAME = "astrbot_plugin_st_bridge"
 EXTENSION_DIR_NAME = "st_bridge_client"
 LINK_FILE = "core_link.json"
 BACKUPS_DIR = "backups"
+# The folders `_place` / `_remove_with_backup` create inside BACKUPS_DIR are named "<label>-<time>"; only those are
+# ever pruned (backups/st-presets and anything else in there belongs to somebody else).
+INSTALL_BACKUP_LABELS = ("astrbot-plugin", "st-extension")
+INSTALL_BACKUP_KEEP = 3
 LAUNCHER_SUFFIXES = (".exe", ".bat", ".cmd")
 # Never imported from an old data folder: logs, caches and backups.
 IMPORT_SKIPPED_NAMES = frozenset({"logs", "temp_audio", "cover_stems", BACKUPS_DIR, "__pycache__"})
@@ -69,6 +73,13 @@ def _is_file(path: Path) -> bool:
 
 def _timestamp(clock: Callable[[], datetime]) -> str:
     return clock().strftime("%Y%m%d-%H%M%S")
+
+
+def _busy_hint(error: BaseException) -> str:
+    """A plain-words reason for a file error while replacing a folder (a locked file is the usual one)."""
+    if isinstance(error, PermissionError) or getattr(error, "winerror", None) in (5, 32, 33):
+        return "有文件被占用或没有权限，请关闭 AstrBot / ST（以及正在查看这些文件的程序）后重试"
+    return f"文件操作出错（{type(error).__name__}），请关闭 AstrBot / ST 后重试"
 
 
 # ---- the paths ---------------------------------------------------------------------------------------
@@ -381,26 +392,158 @@ class InstallService:
 
     # ---- plugin / extension (shared) -------------------------------------------------------------
     def _place(self, source: Path, target: Path, backup_label: str, after: Callable[[Path], None] | None = None) -> dict[str, Any]:
-        """Replace ``target`` (a fixed-name folder inside the folder worked out from the saved path) by ``source``."""
+        """Replace ``target`` (a fixed-name folder inside the folder worked out from the saved path) by ``source``.
+
+        The old folder is only renamed aside while the new one is put in place, so a failure at any step
+        (a locked file, a full disk) puts it back by renaming; deleting the renamed old folder afterwards is
+        best effort (a failure is logged and tidied up at the next install, the new version already works).
+        """
+        self._clear_leftovers(target)
         backup: Path | None = None
-        if target.exists():
-            backup = self._backup_dir(backup_label)
-            backup.parent.mkdir(parents=True, exist_ok=True)
-            self._copy_folder(target, backup)
-            self._remove_tree(target)
+        aside: Path | None = None
+        if os.path.lexists(target):
+            try:
+                backup = self._backup_dir(backup_label)
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                self._copy_folder(target, backup)
+            except Exception as error:
+                raise InstallError(500, f"安装没有开始，原来的文件没有改动：{_busy_hint(error)}") from error
+            aside = self._aside_name(target)
+            try:
+                os.replace(target, aside)
+            except OSError as error:
+                raise InstallError(409, f"安装没有开始，原来的文件没有改动：{_busy_hint(error)}") from error
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             self._copy_folder(source, target)
             if after is not None:
                 after(target)
         except Exception as error:
-            # Put back what was there.
-            if target.exists():
-                self._remove_tree(target)
-            if backup is not None:
-                self._copy_folder(backup, target)
-            raise InstallError(500, f"安装失败（{type(error).__name__}）{'，已恢复原来的文件' if backup else ''}") from error
+            restored = self._restore_aside(target, aside)
+            if aside is None:
+                tail = ""
+            elif restored:
+                tail = "，已恢复原来的文件"
+            else:
+                tail = f"，没能自动恢复，原来的文件在 {aside}（备份在 {backup}）"
+            raise InstallError(500, f"安装失败：{_busy_hint(error)}{tail}") from error
+        if aside is not None:
+            try:
+                self._remove_tree(aside)
+            except Exception as error:
+                self._log(f"[STBridge] Old plugin/extension folder could not be deleted ({type(error).__name__}); it is cleaned up at the next install")
+        self.prune_install_backups(backup_label)
         return {"backup": str(backup) if backup else None, "target": str(target)}
+
+    # ---- the backups this service made ---------------------------------------------------------
+    def _backup_folders(self, label: str) -> list[Path]:
+        """The "<label>-<time>" folders of one label, newest first. Nothing else in backups/ matches."""
+        pattern = re.compile(rf"^{re.escape(label)}-(\d{{8}}-\d{{6}})(?:-(\d+))?$")
+        try:
+            entries = list((self.data_dir / BACKUPS_DIR).iterdir())
+        except OSError:
+            return []
+        found = []
+        for item in entries:
+            match = pattern.match(item.name)
+            if match and item.is_dir() and not item.is_symlink():
+                found.append(((match.group(1), int(match.group(2) or 1)), item))
+        found.sort(key=lambda pair: pair[0], reverse=True)
+        return [item for _, item in found]
+
+    @staticmethod
+    def _folder_size(folder: Path) -> int:
+        total = 0
+        for root, _dirs, files in os.walk(folder):
+            for name in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, name))
+                except OSError:
+                    continue
+        return total
+
+    def prune_install_backups(self, label: str, keep: int = INSTALL_BACKUP_KEEP) -> dict[str, int]:
+        """Keep only the newest `keep` backups of `label`; a folder that cannot be deleted is only logged."""
+        removed = failed = freed = 0
+        for folder in self._backup_folders(label)[max(keep, 0):]:
+            size = self._folder_size(folder)
+            try:
+                shutil.rmtree(folder)
+                removed += 1
+                freed += size
+            except Exception as error:
+                failed += 1
+                self._log(f"[STBridge] Old install backup could not be deleted ({type(error).__name__})")
+        return {"removed": removed, "failed": failed, "bytes": freed}
+
+    def backup_usage(self) -> dict[str, Any]:
+        """How many install backups there are, how big, per label."""
+        labels = {}
+        count = size = 0
+        for label in INSTALL_BACKUP_LABELS:
+            folders = self._backup_folders(label)
+            label_size = sum(self._folder_size(folder) for folder in folders)
+            labels[label] = {"count": len(folders), "bytes": label_size}
+            count += len(folders)
+            size += label_size
+        return {"count": count, "bytes": size, "labels": labels}
+
+    def clear_install_backups(self, keep: int = 1) -> dict[str, int]:
+        """The 清理 button: only the newest `keep` backups of each label stay."""
+        total = {"removed": 0, "failed": 0, "bytes": 0}
+        for label in INSTALL_BACKUP_LABELS:
+            result = self.prune_install_backups(label, keep)
+            for name in total:
+                total[name] += result[name]
+        return total
+
+    @staticmethod
+    def _aside_name(target: Path) -> Path:
+        base = f"{target.name}.old-{int(time.time())}"
+        candidate = target.with_name(base)
+        counter = 1
+        while os.path.lexists(candidate):
+            counter += 1
+            candidate = target.with_name(f"{base}-{counter}")
+        return candidate
+
+    def _restore_aside(self, target: Path, aside: Path | None) -> bool:
+        """Remove the half-installed folder and rename the old one back; True when nothing is left to do."""
+        if aside is None:
+            try:
+                if os.path.lexists(target):
+                    self._remove_tree(target)
+            except Exception:
+                pass
+            return True
+        try:
+            if os.path.lexists(target):
+                self._remove_tree(target)
+            os.replace(aside, target)
+            return True
+        except Exception as error:
+            self._log(f"[STBridge] Could not put the old folder back ({type(error).__name__})")
+            return False
+
+    def _clear_leftovers(self, target: Path) -> None:
+        """Delete folders an earlier install renamed aside and could not delete (best effort)."""
+        try:
+            leftovers = [path for path in target.parent.glob(f"{target.name}.old-*") if path.is_dir() or path.is_symlink()]
+        except OSError:
+            return
+        for path in leftovers:
+            try:
+                self._remove_tree(path)
+            except Exception as error:
+                self._log(f"[STBridge] Leftover folder {path.name} still cannot be deleted ({type(error).__name__})")
+
+    def _log(self, message: str) -> None:
+        logger = self._logger
+        if logger is not None:
+            try:
+                logger.warning(message)
+            except Exception:
+                pass
 
     @staticmethod
     def _remove_tree(target: Path) -> None:
@@ -415,7 +558,10 @@ class InstallService:
         backup = self._backup_dir(backup_label)
         backup.parent.mkdir(parents=True, exist_ok=True)
         self._copy_folder(target, backup)
-        self._remove_tree(target)
+        try:
+            self._remove_tree(target)
+        except Exception as error:
+            raise InstallError(409, f"没能删除：{_busy_hint(error)}") from error
         return {"backup": str(backup), "target": str(target)}
 
     # ---- the AstrBot plugin ----------------------------------------------------------------------

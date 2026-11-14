@@ -400,8 +400,11 @@ class FileBrowserTests(TempDirTestCase):
         self.assertNotIn("gpt_sovits_root", store.config)
         bad = dict(legacy, gpt_sovits_root=5)
         (self.root / "config.json").write_text(json.dumps(bad), encoding="utf-8")
-        with self.assertRaises(RuntimeError):
-            ConfigStore(self.root)
+        # 101e-3: an unusable config is set aside and the defaults are used instead of failing to start.
+        store = ConfigStore(self.root)
+        self.assertEqual(store.recovery["used"], "default")
+        self.assertNotEqual(store.config.get("gpt_sovits_root"), 5)
+        self.assertEqual(len(store.recovery["broken"]), 1)
 
 
 class ConsoleP25RouteTests(unittest.IsolatedAsyncioTestCase):
@@ -453,6 +456,7 @@ class ConsoleP25RouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_upload_uses_emotion_folders_and_clean_names(self):
         await self.bind_character(str(self.ktn))
+        emotions_before = (await self.request("/api/config"))[1]["characters"]["琴音"]["emotions"]
         status, body = await self.upload("开心", "orig.wav", wav_bytes(5), 'そう?<なの>: "本当"|*')
         self.assertEqual(status, 200)
         self.assertEqual(body["relative_path"], "开心/そうなの 本当.wav")
@@ -473,8 +477,11 @@ class ConsoleP25RouteTests(unittest.IsolatedAsyncioTestCase):
             sorted(audio["prompt_text"] for audio in happy["audios"]),
             ["orig-name", "そうなの 本当", "そうなの 本当"],
         )
+        # A new config ships a default 琴音 with default emotions (101b-B); uploading must not touch them,
+        # and the files really are in the emotion folders.
         status, config = await self.request("/api/config")
-        self.assertEqual(config["characters"]["琴音"]["emotions"], {})
+        self.assertEqual(config["characters"]["琴音"]["emotions"], emotions_before)
+        self.assertEqual(sorted(path.name for path in (self.ktn / "开心").iterdir()), ["orig-name.wav", "そうなの 本当 (2).wav", "そうなの 本当.wav"])
 
     async def test_discovered_endpoint_lists_empty_and_out_of_range(self):
         await self.bind_character(str(self.ktn))

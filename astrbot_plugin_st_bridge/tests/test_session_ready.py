@@ -56,10 +56,10 @@ class SessionReadyTests(unittest.IsolatedAsyncioTestCase):
     async def test_idle_report_opens_a_fresh_gate_once(self):
         await self.start()
         self.assertEqual(await self.pending_status(), 503)
-        self.assertEqual(await self.ready(IDLE), (200, {"state": "RECOVERED"}))
+        self.assertEqual(await self.ready(IDLE), (200, {"state": "RECOVERED", "active": True}))
         self.assertEqual(self.gate.state, BridgeRecoveryGate.RECOVERED)
         self.assertEqual(await self.pending_status(), 204)
-        self.assertEqual(await self.ready(IDLE), (200, {"state": "RECOVERED"}))
+        self.assertEqual(await self.ready(IDLE), (200, {"state": "RECOVERED", "active": True}))
         self.assertEqual(self.recoveries, [1])
 
     async def test_busy_client_keeps_the_gate_closed(self):
@@ -72,7 +72,7 @@ class SessionReadyTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(payload=payload):
                 self.assertEqual(
                     await self.ready(payload),
-                    (200, {"state": "RECOVERY_REQUIRED", "reason": "client_busy"}),
+                    (200, {"state": "RECOVERY_REQUIRED", "reason": "client_busy", "active": True}),
                 )
         self.assertEqual(self.gate.state, BridgeRecoveryGate.RECOVERY_REQUIRED)
         self.assertEqual(await self.pending_status(), 503)
@@ -126,7 +126,7 @@ class SessionReadyTests(unittest.IsolatedAsyncioTestCase):
             raise RuntimeError("logger failure")
 
         await self.start(callback=broken)
-        self.assertEqual(await self.ready(IDLE), (200, {"state": "RECOVERED"}))
+        self.assertEqual(await self.ready(IDLE), (200, {"state": "RECOVERED", "active": True}))
 
 
 class PluginAutoRecoveryTests(unittest.IsolatedAsyncioTestCase):
@@ -164,7 +164,7 @@ class PluginAutoRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([result.text for result in results], ["琴音现在不在线哦，晚点再来找我～"])
 
             response = await client.post("/v1/session/ready", json=IDLE, headers={"Origin": ORIGIN})
-            self.assertEqual(await response.json(), {"state": "RECOVERED"})
+            self.assertEqual(await response.json(), {"state": "RECOVERED", "active": True})
             self.assertEqual(module.test_logger.infos, ["[STBridge] Recovery confirmed by ST client"])
 
             processing = asyncio.create_task(

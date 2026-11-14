@@ -164,7 +164,7 @@ class ClipWindowTests(unittest.TestCase):
             self.assertNotIn(name, params)
 
     def test_summary_names_the_separation_and_the_reverb(self):
-        base = params_summary(job_params(validate_cover_settings({}), "", 0.0, 60.0))
+        base = params_summary(job_params(validate_cover_settings({"vocal_reverb": 0}), "", 0.0, 60.0))
         self.assertIn("去伴奏 + 去混响", base)
         self.assertNotIn("混响 ", base.replace("去混响", ""))
         plain = params_summary(job_params(validate_cover_settings({"dereverb_model": "", "vocal_reverb": 30}), "", 0.0, 60.0))

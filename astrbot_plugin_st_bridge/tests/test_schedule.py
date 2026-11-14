@@ -158,13 +158,13 @@ class ScheduleConfigTests(unittest.TestCase):
             self.assertTrue(2 <= len(plan["fallback_texts"]) <= 3, plan["name"])
             self.assertTrue(all("制作人" in text for text in plan["fallback_texts"]), plan["name"])
         by_name = {plan["name"]: plan for plan in section["plans"]}
-        self.assertEqual((by_name["早安"]["time"], by_name["早安"]["jitter_minutes"]), ("07:30", 10))
+        self.assertEqual((by_name["早安"]["time"], by_name["早安"]["jitter_minutes"]), ("09:30", 10))
         self.assertEqual((by_name["午饭"]["time"], by_name["午饭"]["jitter_minutes"]), ("12:00", 10))
         self.assertEqual((by_name["晚饭"]["time"], by_name["晚饭"]["jitter_minutes"]), ("18:30", 10))
-        self.assertEqual((by_name["睡觉提醒"]["time"], by_name["睡觉提醒"]["jitter_minutes"]), ("23:00", 5))
+        self.assertEqual((by_name["睡觉提醒"]["time"], by_name["睡觉提醒"]["jitter_minutes"]), ("00:00", 5))
         self.assertEqual((by_name["晚安"]["time"], by_name["晚安"]["jitter_minutes"]), ("23:30", 5))
         water = by_name["喝水"]
-        self.assertEqual((water["start"], water["end"], water["every_minutes"]), ("10:00", "20:00", 120))
+        self.assertEqual((water["start"], water["end"], water["every_minutes"]), ("10:00", "20:00", 180))
 
     def test_preset_ids_are_stable(self):
         first = [plan["id"] for plan in default_schedule_section()["plans"]]

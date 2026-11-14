@@ -115,7 +115,7 @@ class CoverApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([m["available"] for m in body["dereverb_models"]], [False, False])
         self.assertNotIn("uvr_models", body)
         self.assertEqual(body["settings"]["sep_model"], "vocals-bs-roformer-368")
-        self.assertEqual((body["settings"]["vocal_reverb"], body["settings"]["keep_stems"]), (0, False))
+        self.assertEqual((body["settings"]["vocal_reverb"], body["settings"]["keep_stems"]), (25, False))
         self.assertEqual(body["auto_index"], "kotoneV2_added_IVF1_v2.index")
         self.assertEqual(body["service"]["state"], "stopped")
         self.assertEqual((body["songs"], body["covers"]), ([], []))

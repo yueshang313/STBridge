@@ -72,6 +72,35 @@ class EmotionProfileValidationTests(unittest.TestCase):
                     safe_emotion(value)
 
 
+class StarterCharacterTests(unittest.TestCase):
+    def test_a_new_config_starts_with_the_default_character_and_no_private_data(self):
+        from data.plugins.astrbot_plugin_st_bridge.st_bridge_core.emotion_config import default_config, validate_config
+
+        config = default_config()
+        validate_config(config)
+        self.assertEqual(config["default_character"], "琴音")
+        character = config["characters"]["琴音"]
+        self.assertEqual(
+            (character["name"], character["nickname"], character["st_name"], character["model_name"], character["default_emotion"]),
+            ("琴音", "琴音", "藤田琴音", "", "无感情"),
+        )
+        self.assertEqual(
+            list(character["emotions"]), ["无感情", "开心", "激动", "害羞", "惊讶", "疑惑", "认真", "生气", "伤心"]
+        )
+        for profile in character["emotions"].values():
+            self.assertTrue(profile["caption"])
+            self.assertEqual((profile["ref_audio_path"], profile["prompt_text"]), ("", ""))
+        self.assertEqual(config["models"], {})
+
+    def test_an_old_config_without_the_character_does_not_get_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "config.json").write_text(
+                json.dumps({"version": 1, "default_character": "", "models": {}, "characters": {}}), encoding="utf-8"
+            )
+            store = ConfigStore(Path(directory))
+            self.assertEqual((store.config["characters"], store.config["default_character"]), ({}, ""))
+
+
 class ConfigStoreTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="st-bridge-emotion-")
@@ -117,9 +146,9 @@ class ConfigStoreTests(unittest.TestCase):
         with self.assertRaises(EmotionConfigError):
             asyncio.run(store.update(corrupt))
         self.assertEqual((self.data_dir / "config.json").read_bytes(), before)
-        self.assertEqual(store.config["characters"], {})
+        self.assertEqual(set(store.config["characters"]), {"琴音"})
 
-    def test_corrupt_or_invalid_config_fails_without_overwrite(self):
+    def test_corrupt_or_invalid_config_is_set_aside_and_replaced_by_defaults(self):
         cases = (
             b"{ invalid json\n",
             json.dumps({"version": 2, "models": {}, "characters": {}}).encode(),
@@ -133,10 +162,15 @@ class ConfigStoreTests(unittest.TestCase):
             with self.subTest(original=original):
                 config_path = self.data_dir / "config.json"
                 config_path.write_bytes(original)
-                with self.assertRaises(RuntimeError):
-                    ConfigStore(self.data_dir)
-                self.assertEqual(config_path.read_bytes(), original)
+                store = ConfigStore(self.data_dir)
+                # 101e: the broken file is kept under a new name, never deleted or overwritten.
+                broken = store.recovery["broken"]
+                self.assertEqual(store.recovery["used"], "default")
+                self.assertEqual((self.data_dir / broken[0]).read_bytes(), original)
+                self.assertTrue(config_path.exists())
                 self.assertFalse((self.data_dir / "config.json.bak").exists())
+                config_path.unlink()
+                (self.data_dir / broken[0]).unlink()
 
     def test_legacy_console_token_is_never_published(self):
         legacy = {

@@ -49,7 +49,7 @@ def default_song_request_settings() -> dict[str, Any]:
     return {
         "enabled": True,
         "owner_min_affinity": 0,
-        "group_min_affinity": 21,
+        "group_min_affinity": 0,
         "refuse_percent": 0,
         "list_timeout_seconds": 180,
         "per_source": 5,

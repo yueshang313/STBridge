@@ -9,7 +9,7 @@ export const ENGINE_LABELS = { irodori: "Irodori", gpt_sovits: "GPT-SoVITS" };
 export const TTS_FIELDS = {
   common: [
     ["auto_start", "bool"], ["stop_on_exit", "bool"], ["start_timeout", "int"],
-    ["tts_timeout_minutes", "int"], ["prob", "float"], ["text_limit", "int"],
+    ["tts_timeout_minutes", "int"], ["voice_wait_seconds", "int"], ["prob", "float"], ["text_limit", "int"],
     ["cooldown", "int"], ["send_text_with_audio", "bool"],
     ["split_messages", "bool"], ["split_interval", "float"], ["split_max", "int"]
   ],
@@ -785,12 +785,19 @@ export function saveFailureText(failed) {
 
 export const PAGE_LABELS = {
   overview: "总览", voice: "语音", emotions: "角色和情绪", stickers: "表情包",
-  schedule: "定时计划", sing: "唱歌", affinity: "好感度", injection: "ST 注入", install: "安装与路径", system: "系统"
+  schedule: "定时计划", sing: "唱歌", affinity: "好感度", injection: "ST 注入", install: "安装与路径", connect: "接入", system: "系统"
 };
+/** The sidebar: the overview on top, then the pages in four titled groups (U5-1). */
+export const NAV_GROUPS = [
+  { title: "角色", pages: ["emotions", "affinity", "stickers"] },
+  { title: "功能", pages: ["voice", "sing", "schedule"] },
+  { title: "接入", pages: ["connect", "install", "injection"] },
+  { title: "系统", pages: ["system"] }
+];
 export const SING_TABS = ["library", "params", "chat", "service"];
 export const SING_TAB_LABELS = { library: "歌库", params: "翻唱参数", chat: "聊天点歌", service: "服务与缓存" };
-export const SYSTEM_TABS = ["general", "platform", "texts", "logs", "cleanup", "about"];
-export const SYSTEM_TAB_LABELS = { general: "常规", platform: "聊天平台", texts: "回复文案", logs: "日志", cleanup: "存储清理", about: "关于" };
+export const SYSTEM_TABS = ["general", "texts", "logs", "cleanup", "about"];
+export const SYSTEM_TAB_LABELS = { general: "常规", texts: "回复文案", logs: "日志", cleanup: "存储清理", about: "关于" };
 /** The pages that have tabs, and which tabs. */
 export const PAGE_TABS = { sing: SING_TABS, system: SYSTEM_TABS };
 
@@ -804,6 +811,21 @@ export const LEGACY_PAGES = {
   dashboard: "overview", irodori: "voice", models: "voice", characters: "emotions", audios: "emotions",
   cover: "sing", cleanup: "system"
 };
+
+// Places that moved (U5-1): "#system/platform" now lives on the 接入 page. Queue and owner left "系统 › 常规" too, but
+// that tab still exists (ports), so only the removed tab needs a redirect.
+export const LEGACY_TARGETS = { "system/platform": "connect" };
+
+/** The page and tab to open for a hash target: moved places are redirected, old page names mapped. */
+export function resolveTarget(page, tab = "") {
+  const moved = LEGACY_TARGETS[tab ? `${page}/${tab}` : page];
+  if (moved) {
+    const { page: toPage, tab: toTab } = splitTarget(moved);
+    return { page: toPage, tab: toTab };
+  }
+  const resolved = resolvePage(page);
+  return { page: resolved, tab: resolved === page || LEGACY_PAGES[page] ? tab : "" };
+}
 
 /** The sidebar pages: always all of them, whatever the engine. */
 export function visiblePages() {
@@ -966,16 +988,22 @@ export function playTimeText(current, total) {
 
 /** Empty-list states: one sentence, and the main action when there is one (it clicks the original button). */
 export const EMPTY_STATES = {
-  models: { text: "还没有模型。", action: "new-model", label: "＋ 添加模型" },
-  characters: { text: "还没有角色。", action: "new-character", label: "＋ 添加角色" },
-  plans: { text: "还没有计划。", action: "new-plan", label: "新建计划" },
-  songs: { text: "歌库是空的。", action: "song-file", label: "上传歌曲" },
-  stickers: { text: "这个情绪还没有表情包。", upload: true, label: "上传" },
-  users: { text: "还没有用户。QQ 用户通过桥接收到第一条带好感度变化的回复后会出现在这里。" },
-  covers: { text: "还没有翻唱。" },
-  autos: { text: "还没有自动存档。" },
-  presets: { text: "当前设置还没有保存为预设。" }
+  models: { text: "还没有模型", action: "new-model", label: "＋ 添加模型" },
+  characters: { text: "还没有角色", action: "new-character", label: "＋ 添加角色" },
+  plans: { text: "还没有定时计划", action: "new-plan", label: "新建计划" },
+  songs: { text: "还没有歌曲", action: "song-file", label: "上传第一首" },
+  stickers: { text: "这个情绪还没有表情包", upload: true, label: "上传" },
+  stickerGroups: { text: "还没有可分组的情绪", goto: "emotions", label: "去“角色和情绪”添加" },
+  users: { text: "还没有用户（QQ 用户收到第一条带好感度变化的回复后会出现在这里）", goto: "connect", label: "检查接入" },
+  covers: { text: "还没有翻唱", goto: "sing/library", label: "去歌库" },
+  autos: { text: "还没有自动存档" },
+  presets: { text: "当前设置还没有保存为预设" }
 };
+
+function gotoHref(target) {
+  const { page, tab } = splitTarget(target);
+  return hashFor(page, tab);
+}
 
 /** HTML of an empty state; `options.upload` (an already escaped name) makes the button open that sticker group's file chooser. */
 export function emptyStateMarkup(kind, options = {}) {
@@ -984,7 +1012,8 @@ export function emptyStateMarkup(kind, options = {}) {
   let button = "";
   if (state.action) button = `<button type="button" class="btn btn-primary btn-sm" data-empty-action="${state.action}">${state.label}</button>`;
   else if (state.upload && options.upload !== undefined) button = `<button type="button" class="btn btn-primary btn-sm" data-empty-upload="${options.upload}">${state.label}</button>`;
-  return `<div class="empty-state"><p>${state.text}</p>${button}</div>`;
+  else if (state.goto) button = `<a class="btn btn-primary btn-sm" href="${gotoHref(state.goto)}" data-goto="${state.goto}">${state.label}</a>`;
+  return `<div class="empty-state${button ? " has-action" : ""}"><p>${state.text}</p>${button}</div>`;
 }
 
 /** Key under which a form module's collapsed state is remembered (shares the card map in localStorage). */
@@ -1025,7 +1054,7 @@ export const FEATURE_LINKS = [
   { key: "schedule", label: "定时计划", target: "schedule" },
   { key: "cover", label: "翻唱", target: "sing/service" },
   { key: "song_request", label: "聊天点歌", target: "sing/chat" },
-  { key: "cleanup", label: "自动清理", target: "system" }
+  { key: "cleanup", label: "自动清理", target: "system/cleanup" }
 ];
 
 /** "sing/chat" -> {page: "sing", tab: "chat"}. */
@@ -1146,6 +1175,39 @@ export function ownerProblem(raw) {
   return "";
 }
 
+/** The current owner as the owner card shows it: platform plus the masked id, or that there is none yet. */
+export function ownerCurrentText(claim) {
+  const current = claim?.current;
+  if (!current || !current.masked_id) return "还没有主人";
+  const platform = claim.active_platform === "napcat" ? "NapCat" : (current.platform_id || "AstrBot");
+  return `${platform} · ${current.masked_id}`;
+}
+
+/** Whether pressing "认领主人" needs the "this replaces the owner" confirmation first. */
+export function ownerClaimReplaces(claim) {
+  return Boolean(claim?.current?.masked_id);
+}
+
+/**
+ * How the claim box looks for a status from GET /api/owner/claim:
+ * { pending, code, minutes (m:ss text), text, tone ("info" | "ok" | "error"), poll (keep asking) }.
+ */
+export function ownerClaimView(claim) {
+  const state = claim?.state ?? "idle";
+  if (state === "pending") {
+    const seconds = Math.max(0, Math.floor(Number(claim.expires_in) || 0));
+    const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    return {
+      pending: true, code: String(claim.code ?? ""), clock, poll: true, tone: "info",
+      text: `用你的 QQ 私聊机器人，只发这 6 位数字。还剩 ${clock}。`
+    };
+  }
+  if (state === "claimed") return { pending: false, code: "", clock: "", poll: false, tone: "ok", text: "已认领：以后你就是主人啦。" };
+  if (state === "expired") return { pending: false, code: "", clock: "", poll: false, tone: "error", text: "验证码已过期，请重新点“认领主人”。" };
+  if (state === "failed") return { pending: false, code: "", clock: "", poll: false, tone: "error", text: "认领失败（写配置出错），请看“日志”页后重试。" };
+  return { pending: false, code: "", clock: "", poll: false, tone: "info", text: "" };
+}
+
 /** The overview line for the connector: who is connected, or that nobody is. */
 export function connectorStatusText(status) {
   if (!status || !status.connected) return "插件未连接（未安装或 AstrBot 没开）";
@@ -1245,14 +1307,14 @@ export function presetNameProblem(name) {
 
 /** The sidebar line: which preset is current, and whether the settings were changed since. */
 export function presetLabel(listing) {
-  if (!listing || !listing.current) return "未保存为预设";
+  if (!listing || !listing.current) return "未选择";
   const name = listing.current_name || "（未命名）";
   return listing.modified ? `${name}（已修改）` : name;
 }
 
 /** The overview card's badge: saved / modified (warning colour) / not a preset. */
 export function presetBadge(listing) {
-  if (!listing || !listing.current) return { text: "未保存为预设", kind: "" };
+  if (!listing || !listing.current) return { text: "", kind: "" };
   return listing.modified ? { text: "已修改", kind: "status-warning" } : { text: "已保存", kind: "status-success" };
 }
 
@@ -1263,7 +1325,7 @@ export function applyNotifyText(result, name) {
   for (const note of result.notes || []) parts.push(`${note}。`.replace(/。。$/, "。"));
   for (const warning of result.warnings || []) parts.push(`⚠ ${warning}。`.replace(/。。$/, "。"));
   const missing = Array.isArray(result.missing_paths) ? result.missing_paths.length : 0;
-  if (missing) parts.push(`有 ${missing} 个路径本机找不到，详见“系统”页的“总预设”卡片。`);
+  if (missing) parts.push(`有 ${missing} 个路径本机找不到，详见侧栏的“总预设”窗口。`);
   return parts.join("");
 }
 
@@ -1553,7 +1615,7 @@ function chainNode(id, label, goto, level, text, reason = "") {
 
 /** The QQ side: the connector (AstrBot) or OneBot (NapCat) the active platform needs. */
 function qqNode(status) {
-  const make = (level, text, reason) => chainNode("qq", "QQ 平台", "system/platform", level, text, reason);
+  const make = (level, text, reason) => chainNode("qq", "QQ 平台", "connect", level, text, reason);
   if (!status) return make("off", "未知");
   if (status.platform === "napcat") {
     const info = status.onebot;
@@ -1565,6 +1627,13 @@ function qqNode(status) {
   return make("error", "AstrBot 插件未连接", "AstrBot 插件没连上");
 }
 
+/** True when a service has no folder to start from (its status carries the folder, or a "not set" message). */
+function serviceNotSet(service) {
+  if (!service) return false;
+  if (typeof service.message === "string" && service.message.includes("未设置")) return true;
+  return typeof service.launch_dir === "string" && service.launch_dir.trim() === "";
+}
+
 function voiceNode(voice) {
   const make = (level, text, reason) => chainNode("voice", "语音", "voice", level, text, reason);
   const settings = voice && voice.settings;
@@ -1574,22 +1643,32 @@ function voiceNode(voice) {
   if (!service) return make("off", "未知");
   const engine = ENGINE_LABELS[service.engine] || ENGINE_LABELS[settings && settings.engine] || "语音服务";
   const code = service.state;
-  if (code === "failed") return make("warn", `${engine} 启动失败`, `${engine} 语音服务启动失败`);
+  // 101e: after a failed start the voice is off (text only) for a while.
+  const cool = Number(service.cooldown_seconds) || 0;
+  if (cool > 0 && code !== "running" && code !== "external" && code !== "starting") {
+    const minutes = Math.max(1, Math.ceil(cool / 60));
+    return make("error", `${engine} 启动失败，${minutes} 分钟后重试`, `${engine} 语音服务启动失败，${minutes} 分钟后重试（期间只发文字）`);
+  }
+  if (code === "failed") return make("error", `${engine} 启动失败`, `${engine} 语音服务启动失败`);
   if (code === "running" || code === "external") return make("ok", `${engine} 运行中`);
-  if (code === "starting") return make("ok", `${engine} 启动中`);
-  if (common && common.auto_start === false) return make("warn", `${engine} 没开，也不会自动启动`, `${engine} 语音服务没开，也不会自动启动`);
-  return make("ok", `${engine} 用到时自动启动`);
+  if (code === "starting") return make("idle", `${engine} 启动中`);
+  if (serviceNotSet(service)) return make("error", `${engine} 未设置目录`, `${engine} 语音服务不可用：还没设置目录`);
+  // Stopped is the normal resting state: usable, just not running (yellow, but not counted as a problem).
+  if (common && common.auto_start === false) return make("idle", `${engine} 没开，也不会自动启动`, `${engine} 语音服务没开，也不会自动启动`);
+  return make("idle", `${engine} 用到时自动启动`);
 }
 
 function coverNode(cover) {
   const make = (level, text, reason) => chainNode("cover", "翻唱", "sing/service", level, text, reason);
   if (!cover || cover.enabled === undefined || cover.enabled === null) return make("off", "未知");
   if (!cover.enabled) return make("off", "未启用");
-  const code = cover.service && cover.service.state;
-  if (code === "failed") return make("warn", "RVC 服务启动失败", "翻唱用的 RVC 服务启动失败");
+  const service = cover.service;
+  const code = service && service.state;
+  if (code === "failed") return make("error", "RVC 服务启动失败", "翻唱用的 RVC 服务启动失败");
   if (code === "running" || code === "external") return make("ok", "RVC 运行中");
-  if (code === "starting") return make("ok", "RVC 启动中");
-  return make("ok", "RVC 待命（用到时自动启动）");
+  if (code === "starting") return make("idle", "RVC 启动中");
+  if (serviceNotSet(service)) return make("error", "RVC 未设置目录", "翻唱不可用：还没设置 RVC 目录");
+  return make("idle", "RVC 待命（用到时自动启动）");
 }
 
 function stNode(status) {
@@ -1603,7 +1682,7 @@ function stNode(status) {
 }
 
 /**
- * The six links, in the order a message travels: [{id, label, level: ok|warn|error|off, text, reason, goto}].
+ * The six links, in the order a message travels: [{id, label, level: ok|idle|warn|error|off, text, reason, goto}].
  * `input`: {status (GET /api/status or null), failures (polls that failed in a row), voice: {settings, service},
  * cover: {enabled, service}}. A core that cannot be reached greys out everything behind it.
  */
@@ -1612,7 +1691,7 @@ export function healthChain(input) {
   if (failures >= 2) {
     const dark = (id, label, goto) => chainNode(id, label, goto, "off", "—");
     return [
-      dark("qq", "QQ 平台", "system/platform"),
+      dark("qq", "QQ 平台", "connect"),
       chainNode("core", "核心", "system/logs", "error", "未运行", "核心未运行：双击 start.bat"),
       dark("st", "ST 扩展", "install"),
       dark("reply", "模型回复", "system/logs"),
@@ -1656,27 +1735,54 @@ function nodeDetails(status, voice, cover) {
   return details;
 }
 
-/** The line at the top: what is wrong first, otherwise how many things need a look. `name` is the character's nickname. */
+/** The links whose failure stops the replies; a voice or singing problem never does (text chat still works). */
+export const BLOCKING_NODES = ["qq", "core", "st", "reply"];
+
+const isBlockingError = (node) => node.level === "error" && BLOCKING_NODES.includes(node.id);
+/** Something to look at: a warning, or an error of a link that does not block replies. "idle" (resting) never counts. */
+const needsAttention = (node) => node.level === "warn" || node.level === "error";
+
+/** "error" while a blocking link is down, "warn" for any other problem, else "ok" (idle and off do not count). */
+/** 101e: one sentence for the red bar about unusable data files that were replaced (empty list: no bar). */
+export function recoveryBannerText(notices) {
+  if (!Array.isArray(notices) || notices.length === 0) return null;
+  const parts = notices.map((notice) => {
+    const file = notice && notice.file === "affinity.json" ? "好感度文件 affinity.json" : "配置文件 config.json";
+    const broken = Array.isArray(notice && notice.broken) ? notice.broken.filter(Boolean).join("、") : "";
+    const used = notice && notice.used === "backup" ? "已改用上次的备份"
+      : notice && notice.file === "affinity.json" ? "好感度已从空白开始" : "已改用默认设置";
+    return `${file} 损坏，${used}${broken ? `；坏文件已改名保存为 ${broken}` : ""}`;
+  });
+  return `${parts.join("。")}。请检查设置，保存一次后会成为新的配置。`;
+}
+
+export function healthLevel(chain) {
+  const nodes = Array.isArray(chain) ? chain : [];
+  if (nodes.some(isBlockingError)) return "error";
+  return nodes.some(needsAttention) ? "warn" : "ok";
+}
+
+/** The line at the top: what blocks replies first, otherwise how many things need a look. `name` is the character's nickname. */
 export function healthHeadline(chain, name = DEFAULT_NICKNAME) {
   const nodes = Array.isArray(chain) ? chain : [];
-  const broken = nodes.find((node) => node.level === "error");
+  const broken = nodes.find(isBlockingError);
   if (broken) return `${name}现在回不了消息：${broken.reason || broken.text}`;
-  const warnings = nodes.filter((node) => node.level === "warn").length;
-  if (warnings) return `${name}在线 · 有 ${warnings} 项需要注意`;
+  const attention = nodes.filter(needsAttention).length;
+  if (attention) return `${name}在线 · 有 ${attention} 项需要注意`;
   return `${name}在线 · 一切正常`;
 }
 
 /** The banner on every page: {level: "error"|"warn", text, goto, link} for the first problem, or null when all is well. */
 export function healthBanner(chain, name = DEFAULT_NICKNAME) {
   const nodes = Array.isArray(chain) ? chain : [];
-  const problem = nodes.find((node) => node.level === "error") || nodes.find((node) => node.level === "warn");
+  const problem = nodes.find(isBlockingError) || nodes.find((node) => node.level === "error") || nodes.find((node) => node.level === "warn");
   if (!problem) return null;
   return { level: problem.level, text: healthHeadline(nodes, name), goto: problem.goto, link: `去看看（${problem.label}）` };
 }
 
 /** The tab title: a warning sign in front while something blocks replies. */
 export function healthTitle(base, chain) {
-  const down = Array.isArray(chain) && chain.some((node) => node.level === "error");
+  const down = Array.isArray(chain) && chain.some(isBlockingError);
   return down ? `⚠ ${base}` : base;
 }
 
@@ -1762,7 +1868,7 @@ export function todayCards(today) {
     { id: "chat", label: "主动搭话", value: chat.value, sub: chat.sub, goto: "schedule" },
     { id: "songs", label: "唱歌", value: songs ? number(songs.total) : DASH, sub: songs ? `主人 ${number(songs.owner)} 首` : DASH, goto: "sing/chat" },
     { id: "mood", label: "心情", value: mood.value, sub: mood.sub, goto: "emotions" },
-    { id: "queue", label: "排队", value: queue ? number(queue.waiting) : DASH, sub: queue ? (queue.active ? "正在处理 1 条" : "空闲") : DASH, goto: "system/general" }
+    { id: "queue", label: "排队", value: queue ? number(queue.waiting) : DASH, sub: queue ? (queue.active ? "正在处理 1 条" : "空闲") : DASH, goto: "connect" }
   ];
 }
 
@@ -1784,4 +1890,313 @@ export function featureChips(flags) {
     const on = flags ? flags[link.key] : undefined;
     return { key: link.key, label: link.label, goto: link.target, state: on === undefined ? "unknown" : on ? "on" : "off" };
   });
+}
+
+// ---------- U5-1: the 开始使用 checklist, the audition button and the test chat ----------
+
+/** Where each checklist step is done: the page (and tab) to open, and the element whose card gets highlighted. */
+export const ONBOARDING_STEP_INFO = [
+  { id: "paths", title: "填路径", goto: "install", anchor: "install-check" },
+  { id: "install", title: "装扩展和插件", goto: "install", anchor: "install-extension-state" },
+  { id: "platform", title: "选聊天平台", goto: "connect", anchor: "chatplat-form" },
+  { id: "owner", title: "认领主人", goto: "connect", anchor: "owner-claim-start" },
+  { id: "voice", title: "配语音", goto: "voice", anchor: "service-state", optional: true },
+  { id: "test", title: "发一句测试", goto: "", anchor: "", action: "test-chat" }
+];
+
+const checkState = (install, key) => install && install.checks && install.checks[key] ? install.checks[key].state : "";
+
+/**
+ * The six checklist steps with their state: [{id, title, hint, done, goto, anchor, optional, skipped, action}].
+ * Inputs (all optional, a missing one just leaves its step undone): install = GET /api/install, status = GET /api/status,
+ * owner = GET /api/owner/claim, voice = {settings, service}, flags = console.onboarding.
+ */
+export function onboardingSteps({ install, status, owner, voice, flags } = {}) {
+  const f = flags || {};
+  const platform = status && status.platform === "napcat" ? "napcat" : "astrbot";
+  const stOk = checkState(install, "st") === "valid";
+  const astrbotOk = checkState(install, "astrbot") === "valid";
+  const pathsDone = stOk && (platform === "napcat" || astrbotOk);
+  const pathsHint = pathsDone ? "必填的路径都填好了"
+    : !stOk ? "先填 SillyTavern 的文件夹" : "先填 AstrBot 的文件夹";
+  const extensionOk = Boolean(install && install.extension && install.extension.state === "installed");
+  const pluginOk = Boolean(install && install.plugin && install.plugin.state === "installed");
+  const installDone = extensionOk && (platform === "napcat" || pluginOk);
+  const installHint = installDone ? (platform === "napcat" ? "ST 扩展已安装" : "ST 扩展和 AstrBot 插件都装好了")
+    : !extensionOk ? "还没装 ST 扩展" : "还没装 AstrBot 插件";
+  const connected = platform === "napcat"
+    ? Boolean(status && status.onebot && status.onebot.connected)
+    : Boolean(status && status.connector && status.connector.connected);
+  const platformHint = connected ? `${platform === "napcat" ? "NapCat" : "AstrBot"} 已连上`
+    : `${platform === "napcat" ? "NapCat" : "AstrBot"} 还没连上`;
+  const ownerDone = Boolean(owner && owner.current);
+  const service = voice && voice.service;
+  const engine = voice && voice.settings && voice.settings.engine;
+  const voiceConfigured = Boolean(engine) && Boolean(service) && !serviceNotSet(service);
+  const voiceFailed = Boolean(service && service.state === "failed");
+  const voiceDone = Boolean(f.voice_skipped) || (voiceConfigured && !voiceFailed);
+  const voiceHint = f.voice_skipped ? "已跳过（语音是可选的）"
+    : voiceDone ? "语音引擎已设置"
+    : voiceFailed ? "语音服务启动失败了" : "语音是可选的，不想用可以跳过";
+  const hints = {
+    paths: pathsHint,
+    install: installHint,
+    platform: platformHint,
+    owner: ownerDone ? "已认领主人" : "还没有主人，私聊才不会被忽略",
+    voice: voiceHint,
+    test: f.tested ? "测试对话成功过" : "在这里发一句话，看 ST 能不能回"
+  };
+  const done = {
+    paths: pathsDone, install: installDone, platform: connected, owner: ownerDone, voice: voiceDone, test: Boolean(f.tested)
+  };
+  return ONBOARDING_STEP_INFO.map((info) => ({
+    ...info, hint: hints[info.id], done: Boolean(done[info.id]), skipped: info.id === "voice" && Boolean(f.voice_skipped)
+  }));
+}
+
+/**
+ * What the checklist card shows: {visible, collapsed, line, done, total, needs, markCompleted}.
+ * Never completed: the full list. After it was completed once: a single line (even when a step is undone again,
+ * which only says how many need attention); `expanded` is the user's own choice for this visit.
+ */
+export function onboardingView(steps, flags, expanded = false) {
+  const f = flags || {};
+  const total = steps.length;
+  const done = steps.filter((step) => step.done).length;
+  const needs = total - done;
+  const allDone = total > 0 && needs === 0;
+  const wasCompleted = Boolean(f.completed);
+  const collapsedByDefault = wasCompleted || allDone;
+  const collapsed = collapsedByDefault && !expanded;
+  return {
+    visible: !f.hidden,
+    collapsed,
+    line: allDone ? "✓ 已全部完成" : wasCompleted ? `有 ${needs} 步需要处理` : `已完成 ${done} / ${total}`,
+    done, total, needs,
+    markCompleted: allDone && !wasCompleted
+  };
+}
+
+/** The unsaved form values of one emotion, as the body field for a 试听 (only the engine's own fields, typed like a save). */
+export function auditionProfile(engine, raw) {
+  const names = new Set(EMOTION_FIELDS[engine] || []);
+  const picked = {};
+  for (const [key, value] of Object.entries(raw || {})) if (names.has(key)) picked[key] = value;
+  return buildEmotionPayload(null, engine, picked);
+}
+
+/** The line under a failed 试听 / test sentence, from the status and body of POST /api/tts/test. */
+export function auditionErrorText(status, body) {
+  const data = body && typeof body === "object" ? body : {};
+  const cooldown = Number(data.cooldown_seconds);
+  if (cooldown > 0) return `语音服务冷却中，${Math.ceil(cooldown)} 秒后再试，或先在语音页手动启动`;
+  if (status === 404) return "找不到这个角色，先保存角色再试听";
+  if (status === 400) return `试听的参数不合法：${data.error || "请检查表单"}`;
+  if (data.error === "ServiceStartError") return `语音服务没能启动：${data.message || "看一下语音页的服务日志"}`;
+  const engine = data.engine === "gpt_sovits" ? "GPT-SoVITS" : data.engine === "irodori" ? "Irodori" : "语音引擎";
+  if (data.status) return `${engine} 返回了 ${data.status}${data.error_type ? `（${data.error_type}）` : ""}，合成失败`;
+  return `合成失败：${data.error || "原因不明"}`;
+}
+
+export const TESTCHAT_FAIL_TEXT = {
+  StUnavailable: "ST 扩展没连上核心，或核心还在恢复保护",
+  QueueFull: "排队的人太多了，稍后再试",
+  QueueTimeout: "排队等得太久了",
+  QueueUnavailable: "核心的排队暂时不可用",
+  TooLong: "这句话太长了",
+  InvalidMessage: "这句话不能发",
+  CreateFailed: "没能创建请求",
+  StFailed: "ST 生成失败，可能是 API 欠费、限流或网络问题",
+  Timeout: "ST 没有在时限内回复",
+  EmptyReply: "ST 返回了空回复",
+  InvalidReply: "回复格式不对，预设可能被改坏了"
+};
+
+/** The result line of a test chat: "" for a good one. `error` is a thrown request error ({status, message}). */
+export function testChatProblemText(result, error) {
+  if (error) {
+    if (error.message === "NoOwner") return "还没有主人，先在“接入”页认领主人";
+    if (error.message === "Busy") return "已经有一个测试在进行，稍等一下再发";
+    return `发送失败：${error.message || "原因不明"}`;
+  }
+  const code = result && result.result;
+  if (!code || code === "ok") return result && Array.isArray(result.replies) && result.replies.length ? "" : "没有拿到回复";
+  return TESTCHAT_FAIL_TEXT[code] || `没有拿到回复（${code}）`;
+}
+
+/** The gray line in the test dialog: what a test does and does not do. */
+export const TESTCHAT_NOTE = "会让 ST 在当前聊天里真的加一条消息并生成一次回复（聊天记录里会留下它）；不发到 QQ，不改好感度和心情，不出语音、表情包，不触发点歌和定时计划的发送目标。";
+
+// ---------- U5-2: settings search, log filters ----------
+
+/** Lower case, "_ - . :" read as spaces, white space collapsed: how both the typed words and the index text are compared. */
+export function normalizeSearchText(text) {
+  return String(text ?? "").toLowerCase().replace(/[-_.:/]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export const SEARCH_LIMIT = 30;
+const SEARCH_KIND_ORDER = { page: 0, tab: 1, card: 2, setting: 3, item: 4 };
+const SEARCH_KIND_BONUS = { page: 30, tab: 25, card: 15, setting: 10, item: 5 };
+
+/**
+ * The index entries ({kind, label, keys, help, path[]}) that match the typed words, best first, at most `limit`.
+ * Every word must be found somewhere (label, English key, grey help text or the path); a word found in the label
+ * counts most. Chinese substrings and English in any case both work. An empty query matches nothing.
+ */
+export function searchEntries(entries, query, limit = SEARCH_LIMIT) {
+  const words = normalizeSearchText(query).split(" ").filter(Boolean);
+  if (!words.length) return [];
+  const scored = [];
+  entries.forEach((entry, index) => {
+    const label = normalizeSearchText(entry.label);
+    const keys = normalizeSearchText(entry.keys);
+    const help = normalizeSearchText(entry.help);
+    const path = normalizeSearchText((entry.path || []).join(" "));
+    let score = 0;
+    for (const word of words) {
+      let best = 0;
+      if (label === word) best = 100;
+      else if (label.startsWith(word)) best = 80;
+      else if (label.includes(word)) best = 60;
+      else if (keys.split(" ").some((part) => part === word)) best = 55;
+      else if (keys.includes(word)) best = 50;
+      else if (path.includes(word)) best = 20;
+      else if (help.includes(word)) best = 10;
+      if (!best) return;
+      score += best;
+    }
+    scored.push({ entry, score: score + (SEARCH_KIND_BONUS[entry.kind] || 0), index });
+  });
+  scored.sort((a, b) => b.score - a.score
+    || (SEARCH_KIND_ORDER[a.entry.kind] ?? 9) - (SEARCH_KIND_ORDER[b.entry.kind] ?? 9)
+    || a.index - b.index);
+  return scored.slice(0, limit).map((item) => item.entry);
+}
+
+/** "系统 › 日志 › 核心日志 › 显示最近" for a result row. */
+export function searchPathText(entry) {
+  return (entry.path || []).filter(Boolean).join(" › ");
+}
+
+export const LOG_LEVEL_FILTERS = [
+  { value: "all", label: "全部" },
+  { value: "warning", label: "警告以上" },
+  { value: "error", label: "仅错误" }
+];
+const LOG_LEVEL_RANK = { debug: 10, info: 20, warning: 30, error: 40, critical: 50 };
+const LOG_LEVEL_PATTERN = /^\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\s+(DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\b/i;
+
+/** The level of a log line ("debug" / "info" / "warning" / "error" / "critical"), or "" when it cannot be read. */
+export function parseLogLevel(line) {
+  const match = LOG_LEVEL_PATTERN.exec(String(line ?? ""));
+  if (!match) return "";
+  const name = match[1].toLowerCase();
+  if (name === "warn") return "warning";
+  if (name === "fatal") return "critical";
+  return name;
+}
+
+/** The lines a filter lets through: [{text, level}]. Lines without a readable level only show under "全部". */
+export function filterLogLines(lines, { keyword = "", level = "all" } = {}) {
+  const needle = String(keyword ?? "").trim().toLowerCase();
+  const minimum = level === "error" ? LOG_LEVEL_RANK.error : level === "warning" ? LOG_LEVEL_RANK.warning : 0;
+  const result = [];
+  for (const raw of Array.isArray(lines) ? lines : []) {
+    const text = String(raw);
+    const parsed = parseLogLevel(text);
+    if (minimum && (!parsed || LOG_LEVEL_RANK[parsed] < minimum)) continue;
+    if (needle && !text.toLowerCase().includes(needle)) continue;
+    result.push({ text, level: parsed });
+  }
+  return result;
+}
+
+/** A line cut into [{text, match}] around every (case-insensitive) occurrence of the keyword, for highlighting. */
+export function highlightSegments(text, keyword) {
+  const source = String(text ?? "");
+  const needle = String(keyword ?? "").trim().toLowerCase();
+  const lower = source.toLowerCase();
+  if (!needle || lower.length !== source.length || !lower.includes(needle)) return [{ text: source, match: false }];
+  const segments = [];
+  let from = 0;
+  for (let at = lower.indexOf(needle); at !== -1; at = lower.indexOf(needle, from)) {
+    if (at > from) segments.push({ text: source.slice(from, at), match: false });
+    segments.push({ text: source.slice(at, at + needle.length), match: true });
+    from = at + needle.length;
+  }
+  if (from < source.length) segments.push({ text: source.slice(from), match: false });
+  return segments;
+}
+
+/** "显示 12 / 300 行" under the log view. */
+export function logCountText(shown, total) {
+  return shown === total ? `共 ${total} 行` : `显示 ${shown} / ${total} 行`;
+}
+
+/** The text of the cleanup page's row for the install backups. */
+export function installBackupsText(usage) {
+  if (!usage || !usage.count) return "还没有备份";
+  const labels = usage.labels || {};
+  const plugin = labels["astrbot-plugin"] ? labels["astrbot-plugin"].count : 0;
+  const extension = labels["st-extension"] ? labels["st-extension"].count : 0;
+  return `共 ${usage.count} 份（插件 ${plugin}、扩展 ${extension}），占用 ${bytesText(usage.bytes)}`;
+}
+
+// ---------- U5-3: row-style settings, page help, restore defaults, sidebar status ----------
+
+/** The floating save bar: "有 N 项修改未保存" (no count: just that there are changes). */
+export function saveBarText(count) {
+  const n = Number(count);
+  return Number.isFinite(n) && n > 0 ? `有 ${n} 项修改未保存` : "有修改未保存";
+}
+
+const FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$/;
+
+/** The small grey config key next to a setting's name: the collected key when it looks like one, else "" (not shown). */
+export function fieldKeyText(key, labelText = "") {
+  const text = String(key ?? "");
+  if (!FIELD_KEY_PATTERN.test(text)) return "";
+  if (text === String(labelText ?? "").trim()) return "";
+  return text;
+}
+
+/** One-line page lead ("?" help): where each page's open/closed choice is kept. */
+export function helpStorageKey(id) {
+  return `stbridge.console.help.${id}`;
+}
+
+/** Was the page's help left open? Any storage problem means closed. */
+export function readHelpOpen(storage, id) {
+  try { return storage.getItem(helpStorageKey(id)) === "1"; } catch { return false; }
+}
+
+export function writeHelpOpen(storage, id, open) {
+  try {
+    if (open) storage.setItem(helpStorageKey(id), "1"); else storage.removeItem(helpStorageKey(id));
+    return true;
+  } catch { return false; }
+}
+
+/** What "恢复默认" puts into a module: the default value of every key the module holds (keys the defaults lack are left alone). */
+export function restoreValues(defaults, keys) {
+  const picked = {};
+  for (const key of keys || []) if (defaults && Object.prototype.hasOwnProperty.call(defaults, key)) picked[key] = defaults[key];
+  return picked;
+}
+
+/** Two or three short options read better as buttons side by side than as a drop-down (long labels would wrap: keep the drop-down). */
+export function useSegmented(optionCount, totalChars = 0) {
+  return Number.isInteger(optionCount) && optionCount >= 2 && optionCount <= 3 && Number(totalChars) <= 20;
+}
+
+/** The sidebar's status line: a dot colour and a word for the core, from the status the console already polls. */
+export function coreStatusView(status, failures = 0) {
+  if (failures >= 2) return { level: "error", text: "连接断开" };
+  if (!status) return { level: "idle", text: "连接中…" };
+  return { level: "ok", text: "运行中" };
+}
+
+export function platformName(status) {
+  if (!status || !status.platform) return "";
+  return status.platform === "napcat" ? "NapCat（QQ 小号）" : "AstrBot（QQ 官方机器人）";
 }

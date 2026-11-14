@@ -23,13 +23,15 @@ from .sticker_store import StickerStore
 from .storage_cleanup import CleanupService, cleanup_settings
 from .tts_coordinator import TtsCoordinator
 from .bridge_types import REQUEST_TIMEOUT_SECONDS, _console_error_type
+from .emotion_config import QUEUE_HOLD_EXTRA_SECONDS
 
 
 ST_ORIGIN = "http://localhost:11451"
 HTTP_LISTEN_HOST = "127.0.0.1"
 HTTP_LISTEN_PORT = 11452
 # A dispatched turn may hold the queue slot this long before the next waiter frees it.
-QUEUE_ACTIVE_HOLD_LIMIT_SECONDS = REQUEST_TIMEOUT_SECONDS + 120
+# (The default; the live limit is the configured reply time limit + QUEUE_HOLD_EXTRA_SECONDS.)
+QUEUE_ACTIVE_HOLD_LIMIT_SECONDS = REQUEST_TIMEOUT_SECONDS + QUEUE_HOLD_EXTRA_SECONDS
 
 
 class LifecycleMixin:
@@ -52,10 +54,11 @@ class LifecycleMixin:
             self._network_in_use = ports
             gate = BridgeRecoveryGate()
             state_manager = RequestStateManager(
-                timeout_seconds=REQUEST_TIMEOUT_SECONDS,
+                timeout_seconds=self._queue_settings()["reply_timeout_seconds"],
             )
             config = HttpProtocolConfig(
                 allowed_origin=f"http://localhost:{ports['st_port']}",
+                extra_origins=(f"http://127.0.0.1:{ports['st_port']}",),
                 listen_host=HTTP_LISTEN_HOST,
                 listen_port=ports["bridge_port"],
             )
@@ -100,10 +103,16 @@ class LifecycleMixin:
     def _log_client_recovery() -> None:
         logger.info("[STBridge] Recovery confirmed by ST client")
 
-    @staticmethod
-    def _new_queue() -> BridgeQueue:
+    def _active_hold_limit(self) -> float:
+        """Seconds a dispatched turn may hold the queue slot: the reply time limit plus a margin."""
+        try:
+            return float(self._queue_settings()["reply_timeout_seconds"]) + QUEUE_HOLD_EXTRA_SECONDS
+        except Exception:
+            return QUEUE_ACTIVE_HOLD_LIMIT_SECONDS
+
+    def _new_queue(self) -> BridgeQueue:
         return BridgeQueue(
-            active_hold_limit=QUEUE_ACTIVE_HOLD_LIMIT_SECONDS,
+            active_hold_limit=self._active_hold_limit,
             on_force_release=LifecycleMixin._log_queue_force_release,
         )
 
@@ -319,6 +328,8 @@ class LifecycleMixin:
                     cover=self._cover,
                     cleanup=self._cleanup,
                     test_chat=self.run_test_chat,
+                    owner_claim_start=self.owner_claim_start,
+                    owner_claim_status=self.owner_claim_status,
                 ),
                 **console_kwargs,
             )

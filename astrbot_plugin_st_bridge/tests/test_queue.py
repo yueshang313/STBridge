@@ -160,13 +160,13 @@ class PluginQueueTests(unittest.IsolatedAsyncioTestCase):
         await store.update(edit)
         tasks = [self.group("先", "member-0", "甲")[0]]
         await self.settle()
-        for index in range(1, 6):
+        for index in range(1, 11):
             tasks.append(self.group("等", f"member-{index}", f"乙{index}")[0])
             await self.settle()
-        rejected, _ = self.group("满", "member-6", "丙")
+        rejected, _ = self.group("满", "member-11", "丙")
         self.assertEqual([item.text for item in await rejected], ["现在找夜夜的人太多啦，请稍后再来～"])
         await store.update(lambda config: config["texts"].update(queue_full="{昵称}正忙，等等再来"))
-        rejected, _ = self.group("满", "member-7", "丁")
+        rejected, _ = self.group("满", "member-12", "丁")
         self.assertEqual([item.text for item in await rejected], ["夜夜正忙，等等再来"])
         for task in tasks:
             task.cancel()
@@ -175,14 +175,14 @@ class PluginQueueTests(unittest.IsolatedAsyncioTestCase):
     async def test_sixth_waiter_is_rejected_without_request(self):
         tasks = [self.group("先", "member-0", "甲")[0]]
         await self.settle()
-        for index in range(1, 6):
+        for index in range(1, 11):
             tasks.append(self.group("等", f"member-{index}", f"乙{index}")[0])
             await self.settle()
-        self.assertEqual(self.plugin._core._queue.waiting_count, 5)
+        self.assertEqual(self.plugin._core._queue.waiting_count, 10)
 
-        rejected, _ = self.group("满", "member-6", "丙")
+        rejected, _ = self.group("满", "member-11", "丙")
         self.assertEqual([item.text for item in await rejected], [self.module.QUEUE_FULL_TEXT])
-        self.assertEqual(self.plugin._core._queue.waiting_count, 5)
+        self.assertEqual(self.plugin._core._queue.waiting_count, 10)
         self.assertTrue(any(line.startswith("[STBridge] Queue full") for line in self.logger.warnings))
 
         self.plugin._core._http_service.state = HttpServiceState.STOPPED
@@ -202,6 +202,39 @@ class PluginQueueTests(unittest.IsolatedAsyncioTestCase):
         self.plugin._core._http_service.state = HttpServiceState.STOPPED
         await asyncio.gather(first, waiting)
 
+    async def test_reply_time_limit_comes_from_console_settings(self):
+        store = ConfigStore(Path(self._directory.name) / "console")
+        await store.update(lambda config: config.update(queue={"max_waiting": 5, "max_wait_seconds": 300, "reply_timeout_seconds": 90}))
+        self.plugin._core._emotion_store = store
+        first, _ = self.group("时限", "member-a", "甲")
+        request = await self.next_request()
+        self.assertEqual(request.expires_at - request.created_at, 90)
+        # The queue's forced-release time follows the same setting (limit + 120 s), also after a change.
+        self.assertEqual(self.plugin._core._active_hold_limit(), 90 + 120)
+        await store.update(lambda config: config.update(queue={"max_waiting": 5, "max_wait_seconds": 300, "reply_timeout_seconds": 400}))
+        self.assertEqual(self.plugin._core._active_hold_limit(), 400 + 120)
+        self.plugin._core._http_service.state = HttpServiceState.STOPPED
+        await first
+
+    async def test_default_reply_time_limit_is_180_seconds(self):
+        first, _ = self.group("默认", "member-a", "甲")
+        request = await self.next_request()
+        self.assertEqual(request.expires_at - request.created_at, 180)
+        self.assertEqual(self.plugin._core._active_hold_limit(), 300)
+        self.plugin._core._http_service.state = HttpServiceState.STOPPED
+        await first
+
+    async def test_queue_hold_limit_can_be_a_function_read_at_every_check(self):
+        clock = FakeClock()
+        limit = [100.0]
+        queue = BridgeQueue(clock=clock, poll_interval=0.01, active_hold_limit=lambda: limit[0])
+        entry = queue.enqueue("a", "x", max_waiting=3)
+        await queue.wait_turn(entry, max_wait_seconds=30, dispatch=lambda current: "go", available=lambda: True)
+        clock.now += 150
+        self.assertEqual(queue._held_too_long(), 150)
+        limit[0] = 200.0
+        self.assertIsNone(queue._held_too_long())
+
     async def test_wait_timeout_removes_entry_with_plain_notice(self):
         clock = FakeClock()
         self.plugin._core._queue = BridgeQueue(clock=clock, poll_interval=0.01)
@@ -209,7 +242,7 @@ class PluginQueueTests(unittest.IsolatedAsyncioTestCase):
         await self.settle()
         late, event = self.group("后", "member-b", "小红")
         await self.settle()
-        clock.now += 181
+        clock.now += 301
         results = await late
         self.assertEqual([item.text for item in results], [f"@小红 {self.module.QUEUE_TIMEOUT_TEXT}"])
         self.assertIsNone(self.plugin._core._tts.eligible)
@@ -424,7 +457,7 @@ class PluginQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.content, "【群友】小红（1）[好感度:0]：后")
         hashed_a = user_hash(user_key("qq-platform", "member-a"))
         self.assertTrue(any(
-            line.startswith(f"[STBridge] Queue slot force-released user={hashed_a} held=241")
+            line.startswith(f"[STBridge] Queue slot force-released user={hashed_a} held=301")
             for line in self.logger.warnings
         ))
 
@@ -494,15 +527,16 @@ class BridgeQueueWatchdogTests(unittest.IsolatedAsyncioTestCase):
 
 class QueueSettingsTests(unittest.TestCase):
     def test_defaults_bounds_and_fallback(self):
-        self.assertEqual(default_queue_settings(), {"max_waiting": 5, "max_wait_seconds": 180})
+        self.assertEqual(default_queue_settings(), {"max_waiting": 10, "max_wait_seconds": 300, "reply_timeout_seconds": 180})
         self.assertEqual(validate_queue_settings({}), default_queue_settings())
         self.assertEqual(
             validate_queue_settings({"max_waiting": 20, "max_wait_seconds": 30}),
-            {"max_waiting": 20, "max_wait_seconds": 30},
+            {"max_waiting": 20, "max_wait_seconds": 30, "reply_timeout_seconds": 180},
         )
         for bad in (
             {"max_waiting": 0}, {"max_waiting": 21}, {"max_waiting": 2.5}, {"max_waiting": True},
             {"max_wait_seconds": 29}, {"max_wait_seconds": 601}, {"max_wait_seconds": "60"}, [],
+            {"reply_timeout_seconds": 59}, {"reply_timeout_seconds": 601}, {"reply_timeout_seconds": 90.5}, {"reply_timeout_seconds": "90"},
         ):
             with self.subTest(bad=bad), self.assertRaises(EmotionConfigError):
                 validate_queue_settings(bad)
@@ -517,8 +551,9 @@ class QueueSettingsTests(unittest.TestCase):
             self.assertEqual(ConfigStore(root).config["queue"], default_queue_settings())
             broken = dict(legacy, queue={"max_waiting": 0})
             (root / "config.json").write_text(json.dumps(broken), encoding="utf-8")
-            with self.assertRaises(RuntimeError):
-                ConfigStore(root)
+            recovered = ConfigStore(root)  # 101e: an invalid saved section no longer stops the core
+            self.assertEqual(recovered.recovery["used"], "default")
+            self.assertEqual(recovered.config["queue"], default_queue_settings())
 
 
 class QueueConsoleTests(unittest.IsolatedAsyncioTestCase):
@@ -553,7 +588,7 @@ class QueueConsoleTests(unittest.IsolatedAsyncioTestCase):
         status, body = await self.call("GET", "/api/queue")
         self.assertEqual(status, 200)
         self.assertEqual(body, {
-            "settings": {"max_waiting": 5, "max_wait_seconds": 180},
+            "settings": {"max_waiting": 10, "max_wait_seconds": 300, "reply_timeout_seconds": 180},
             "active": True,
             "waiting_count": 1,
             "waiting": self.status["waiting"],
@@ -561,8 +596,8 @@ class QueueConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("openid-1", json.dumps(body))
 
         status, body = await self.call("POST", "/api/queue/settings", {"max_waiting": 8, "max_wait_seconds": 240})
-        self.assertEqual((status, body), (200, {"settings": {"max_waiting": 8, "max_wait_seconds": 240}}))
-        self.assertEqual(self.store.config["queue"], {"max_waiting": 8, "max_wait_seconds": 240})
+        self.assertEqual((status, body), (200, {"settings": {"max_waiting": 8, "max_wait_seconds": 240, "reply_timeout_seconds": 180}}))
+        self.assertEqual(self.store.config["queue"], {"max_waiting": 8, "max_wait_seconds": 240, "reply_timeout_seconds": 180})
         for payload in ({"max_waiting": 21}, {"max_wait_seconds": 10}, {"max_waiting": "8"}):
             status, _ = await self.call("POST", "/api/queue/settings", payload)
             self.assertEqual(status, 400)

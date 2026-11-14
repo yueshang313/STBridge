@@ -13,7 +13,7 @@ from .request_queue import QueueEntry, QueueFullError, QueueTimeoutError, QueueU
 from .request_state import BridgeRequest, RequestBusyError, RequestStateManager, RequestStatus
 from .reply_texts import default_texts, fill_nickname
 from .song_request import strip_sing_tags
-from .bridge_types import REQUEST_TIMEOUT_SECONDS, _ContentTooLongError, _Origin, _ParsedReply, _Speaker, _last_game_open, extract_reply_pairs, merge_pairs, cap_pairs, split_game_block
+from .bridge_types import _ContentTooLongError, _Origin, _ParsedReply, _Speaker, _last_game_open, extract_reply_pairs, merge_pairs, cap_pairs, split_game_block
 
 
 REQUEST_POLL_INTERVAL_SECONDS = 0.1
@@ -202,7 +202,7 @@ class BridgeMixin:
             try:
                 request = state_manager.create_request(
                     request_content,
-                    timeout_seconds=REQUEST_TIMEOUT_SECONDS,
+                    timeout_seconds=settings["reply_timeout_seconds"],
                     affinity_writes=speaker.writes if speaker is not None else None,
                     macros=self._turn_macros(speaker, origin),
                 )
@@ -486,6 +486,9 @@ class BridgeMixin:
 
     def accept_private(self, msg: IncomingMessage) -> bool:
         """Is this private message the operator's (the only one bridged)? Remembers its conversation for schedules."""
+        # The owner-claim code (private chat only) is the one message a non-owner may send; handle_private answers it.
+        if self._claim_try(msg):
+            return True
         if not self._is_operator_private_message(msg):
             return False
         self._record_schedule_target(msg, group=False)
@@ -497,6 +500,12 @@ class BridgeMixin:
 
     async def handle_private(self, msg: IncomingMessage):
         """Bridge an accepted private message: the batches to send, in order."""
+        claim = self._claim_take(msg)
+        if claim is not None:
+            # An owner claim: a fixed answer, nothing goes to ST, the queue, the counters or the activity clock.
+            async for batch in self._apply_claim(msg, claim):
+                yield batch
+            return
         async for batch in self._counted_handler(msg, self._handle_private(msg)):
             yield batch
 

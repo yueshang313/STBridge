@@ -192,6 +192,13 @@ def extract_wav_response(response) -> bytes:
     return audio_data
 
 
+def local_http_client(**kwargs):
+    """httpx client for services on this machine: never routed through the system proxy (trust_env=False)."""
+    import httpx
+
+    return httpx.AsyncClient(trust_env=False, **kwargs)
+
+
 async def post_api_py_audio(
     client_factory,
     base_url: str,

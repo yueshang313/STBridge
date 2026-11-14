@@ -11,30 +11,67 @@
   <div class="container">
     <aside class="sidebar">
       <div class="logo">
-        <h1>ST <span>Bridge</span></h1>
+        <span class="logo-avatar" id="side-avatar" aria-hidden="true">·</span>
+        <div class="logo-text"><h1 id="side-name">ST Bridge</h1><small>ST Bridge 控制台</small></div>
       </div>
+      <button type="button" class="sidebar-search" id="search-open" title="搜索设置、页面、卡片（Ctrl+K）"><span>搜索设置…</span><kbd id="search-hint">Ctrl K</kbd></button>
       <nav class="nav" aria-label="主导航">
         <a href="#overview" class="nav-item active" data-page="overview"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></span><span>总览</span></a>
-        <a href="#voice" class="nav-item" data-page="voice"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2h2.3L8 3.4v9.2L4.8 9.8H2.5z"/><path d="M10.6 5.6a3.6 3.6 0 0 1 0 4.8"/><path d="M12.4 3.8a6.2 6.2 0 0 1 0 8.4"/></svg></span><span>语音</span></a>
-        <a href="#emotions" class="nav-item" data-page="emotions"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M5.6 9.6a3 3 0 0 0 4.8 0"/><path d="M5.8 6.2v.6M10.2 6.2v.6"/></svg></span><span>角色和情绪</span></a>
-        <a href="#stickers" class="nav-item" data-page="stickers"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><circle cx="5.6" cy="6" r="1.1"/><path d="M2.5 12l3.4-3.4 2.6 2.6 2-2 3 3"/></svg></span><span>表情包</span></a>
-        <a href="#schedule" class="nav-item" data-page="schedule"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5"/><path d="M8 5.6v3l2 1.2"/><path d="M3 3l1.6-1.2M13 3l-1.6-1.2"/></svg></span><span>定时计划</span></a>
-        <a href="#sing" class="nav-item" data-page="sing"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="6" y="1.8" width="4" height="7" rx="2"/><path d="M3.8 7.6a4.2 4.2 0 0 0 8.4 0"/><path d="M8 11.8v2.4M5.8 14.2h4.4"/></svg></span><span>唱歌</span></a>
-        <a href="#affinity" class="nav-item" data-page="affinity"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.6S2.4 10.2 2.4 6.2a3 3 0 0 1 5.6-1.5A3 3 0 0 1 13.6 6.2c0 4-5.6 7.4-5.6 7.4z"/></svg></span><span>好感度</span></a>
-        <a href="#injection" class="nav-item" data-page="injection"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.2h7.4L13 5.8v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-8.6a1 1 0 0 1 1-1z"/><path d="M8 6.2v4.6M5.7 8.5h4.6"/></svg></span><span>ST 注入</span></a>
-        <a href="#install" class="nav-item" data-page="install"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.2a1 1 0 0 1 1-1h3.2l1.5 1.7H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M8 7.4v3.2M6.4 9.2L8 10.8l1.6-1.6"/></svg></span><span>安装与路径</span></a>
-        <a href="#system" class="nav-item" data-page="system"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h12M2 8h12M2 11.5h12"/><circle cx="10.5" cy="4.5" r="1.4" fill="var(--surface)"/><circle cx="5.5" cy="8" r="1.4" fill="var(--surface)"/><circle cx="11" cy="11.5" r="1.4" fill="var(--surface)"/></svg></span><span>系统</span></a>
+        <div class="nav-group" role="group" aria-label="角色"><div class="nav-group-title">角色</div>
+          <a href="#emotions" class="nav-item" data-page="emotions"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M5.6 9.6a3 3 0 0 0 4.8 0"/><path d="M5.8 6.2v.6M10.2 6.2v.6"/></svg></span><span>角色和情绪</span></a>
+          <a href="#affinity" class="nav-item" data-page="affinity"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.6S2.4 10.2 2.4 6.2a3 3 0 0 1 5.6-1.5A3 3 0 0 1 13.6 6.2c0 4-5.6 7.4-5.6 7.4z"/></svg></span><span>好感度</span></a>
+          <a href="#stickers" class="nav-item" data-page="stickers"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><circle cx="5.6" cy="6" r="1.1"/><path d="M2.5 12l3.4-3.4 2.6 2.6 2-2 3 3"/></svg></span><span>表情包</span></a>
+        </div>
+        <div class="nav-group" role="group" aria-label="功能"><div class="nav-group-title">功能</div>
+          <a href="#voice" class="nav-item" data-page="voice"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2h2.3L8 3.4v9.2L4.8 9.8H2.5z"/><path d="M10.6 5.6a3.6 3.6 0 0 1 0 4.8"/><path d="M12.4 3.8a6.2 6.2 0 0 1 0 8.4"/></svg></span><span>语音</span></a>
+          <a href="#sing" class="nav-item" data-page="sing"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="6" y="1.8" width="4" height="7" rx="2"/><path d="M3.8 7.6a4.2 4.2 0 0 0 8.4 0"/><path d="M8 11.8v2.4M5.8 14.2h4.4"/></svg></span><span>唱歌</span></a>
+          <a href="#schedule" class="nav-item" data-page="schedule"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5"/><path d="M8 5.6v3l2 1.2"/><path d="M3 3l1.6-1.2M13 3l-1.6-1.2"/></svg></span><span>定时计划</span></a>
+        </div>
+        <div class="nav-group" role="group" aria-label="接入"><div class="nav-group-title">接入</div>
+          <a href="#connect" class="nav-item" data-page="connect"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.6 9.4l2.8-2.8"/><path d="M7.2 4.4l.9-.9a2.4 2.4 0 0 1 3.4 3.4l-.9.9"/><path d="M8.8 11.6l-.9.9A2.4 2.4 0 0 1 4.5 9.1l.9-.9"/></svg></span><span>接入</span></a>
+          <a href="#install" class="nav-item" data-page="install"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.2a1 1 0 0 1 1-1h3.2l1.5 1.7H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M8 7.4v3.2M6.4 9.2L8 10.8l1.6-1.6"/></svg></span><span>安装与路径</span></a>
+          <a href="#injection" class="nav-item" data-page="injection"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.2h7.4L13 5.8v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-8.6a1 1 0 0 1 1-1z"/><path d="M8 6.2v4.6M5.7 8.5h4.6"/></svg></span><span>ST 注入</span></a>
+        </div>
+        <div class="nav-group" role="group" aria-label="系统"><div class="nav-group-title">系统</div>
+          <a href="#system" class="nav-item" data-page="system"><span class="icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h12M2 8h12M2 11.5h12"/><circle cx="10.5" cy="4.5" r="1.4" fill="var(--surface)"/><circle cx="5.5" cy="8" r="1.4" fill="var(--surface)"/><circle cx="11" cy="11.5" r="1.4" fill="var(--surface)"/></svg></span><span>系统</span></a>
+        </div>
       </nav>
+      <div class="sidebar-status" id="side-status" aria-live="polite">
+        <div class="side-status-row"><span class="side-dot level-idle" id="side-dot" aria-hidden="true"></span><span id="side-status-text">连接中…</span><span class="side-version" id="side-version"></span></div>
+        <div class="side-status-row side-platform" id="side-platform" hidden></div>
+      </div>
+      <div class="sidebar-preset">
+        <button type="button" class="sidebar-preset-btn" id="preset-switcher" aria-haspopup="dialog" title="切换、保存、导入导出总预设（全部设置的存档）">
+          <span class="sidebar-preset-label">总预设</span>
+          <span class="sidebar-preset-name" id="preset-current">-</span>
+          <span id="preset-switcher-badge" class="status-badge">读取中...</span>
+        </button>
+      </div>
     </aside>
 
     <main class="main-content">
+      <div id="recovery-banner" class="health-banner level-error" role="alert" hidden><span id="recovery-banner-text" class="health-banner-text"></span><button type="button" id="recovery-banner-dismiss" class="btn btn-secondary btn-sm">知道了</button></div>
       <div id="health-banner" class="health-banner" role="status" hidden><span id="health-banner-text" class="health-banner-text"></span><a id="health-banner-link" class="health-banner-link" href="#overview" data-goto="overview"></a></div>
       <section id="overview" class="page active">
         <header class="page-header"><div><h2>总览</h2></div></header>
+        <section class="card onboarding-card" id="ov-onboarding" aria-label="开始使用" hidden>
+          <div class="onboarding-head">
+            <h3>开始使用</h3>
+            <span id="onboarding-line" class="onboarding-line"></span>
+            <span class="onboarding-tools">
+              <button type="button" class="btn btn-secondary btn-sm" id="onboarding-toggle">收起</button>
+              <details class="onboarding-more"><summary class="btn btn-secondary btn-sm" aria-label="更多操作">⋯</summary><div class="onboarding-more-menu"><button type="button" class="btn btn-danger-ghost btn-sm" id="onboarding-hide">隐藏这张清单</button></div></details>
+            </span>
+          </div>
+          <div class="onboarding-progress" id="onboarding-progress" role="progressbar" aria-label="开始使用进度" aria-valuemin="0" aria-valuemax="6" aria-valuenow="0"><span id="onboarding-progress-bar"></span></div>
+          <ol class="onboarding-steps" id="onboarding-steps"></ol>
+        </section>
+        <div class="onboarding-restore" id="onboarding-restore" hidden><button type="button" class="btn btn-secondary btn-sm" id="onboarding-show">显示“开始使用”清单</button></div>
         <section class="card health-chain" id="ov-health" aria-label="状态与消息链路">
           <div class="health-top">
             <span class="health-avatar" id="ov-avatar" aria-hidden="true">·</span>
             <div class="health-who"><h3 class="health-name" id="ov-name">…</h3><p class="health-headline" id="ov-health-headline">正在检查…</p></div>
+            <button type="button" class="btn btn-secondary btn-sm" id="overview-test-chat" title="让 ST 真的回一句话，确认整条链路是通的">发一句测试对话</button>
             <button type="button" class="btn btn-secondary btn-sm health-restart" id="overview-restart-core" title="重启核心：正在处理的消息会中断，页面会自动重新连接"><svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8A5.2 5.2 0 1 1 11.6 4.3"/><path d="M13.4 2.2v3.3h-3.3"/></svg><span>重启核心</span></button>
           </div>
           <ol class="health-nodes" id="ov-health-nodes"></ol>
@@ -45,23 +82,18 @@
           <a class="today-card" href="#schedule" data-goto="schedule" data-today="chat"><span class="today-label">主动搭话</span><strong class="today-number">-</strong><span class="today-sub">-</span></a>
           <a class="today-card" href="#sing/chat" data-goto="sing/chat" data-today="songs"><span class="today-label">唱歌</span><strong class="today-number">-</strong><span class="today-sub">-</span></a>
           <a class="today-card" href="#emotions" data-goto="emotions" data-today="mood"><span class="today-label">心情</span><strong class="today-number">-</strong><span class="today-sub">-</span></a>
-          <a class="today-card" href="#system/general" data-goto="system/general" data-today="queue"><span class="today-label">排队</span><strong class="today-number">-</strong><span class="today-sub">-</span></a>
+          <a class="today-card" href="#connect" data-goto="connect" data-today="queue"><span class="today-label">排队</span><strong class="today-number">-</strong><span class="today-sub">-</span></a>
         </div>
         <div class="cards-grid overview-lower">
-          <article class="card" id="ov-preset-card"><div class="card-header"><h3>总预设</h3><span id="ov-preset-state" class="status-badge">读取中...</span></div><div class="card-body"><div class="info-item"><span class="label">当前预设</span><span id="preset-current" class="value">-</span></div><select id="preset-select" class="select preset-overview-select" aria-label="切换预设"><option value="">切换预设…</option></select><p class="console-note" id="ov-preset-result" hidden></p><p class="console-note">保存、导入导出等在“<a href="#system" data-goto="system">系统</a>”页的“总预设”卡片里。</p></div></article>
           <details class="card install-fold" id="ov-install-card"><summary class="install-fold-summary"><span class="install-fold-title">安装状态</span><span id="ov-install-state" class="status-badge">读取中...</span><span id="ov-install-summary" class="install-fold-text">-</span></summary><div class="card-body"><div class="info-item"><span class="label">ST 扩展</span><span id="ov-install-ext" class="value">-</span></div><div class="info-item"><span class="label">AstrBot 插件</span><span id="ov-install-plugin" class="value">-</span></div><div class="info-item"><span class="label">路径</span><span id="ov-install-paths" class="value">-</span></div><p class="console-note">在“<a href="#install" data-goto="install">安装与路径</a>”页填路径、装插件和扩展。</p></div></details>
         </div>
         <div class="section-header console-section-title"><h3>功能开关一览</h3></div>
         <div id="ov-features" class="feature-chips"><span class="placeholder">读取中...</span></div>
       </section>
 
-      <section id="install" class="page">
-        <header class="page-header"><div><h2>安装与路径</h2></div></header>
-        <div class="card console-note-card">
-          <p>顺序：<strong>① 填好下面的路径并保存</strong>（没有的留空）→ <strong>② 安装 AstrBot 插件和 ST 扩展</strong> → ③ 需要的话导入旧数据、安装额外依赖。</p>
-          <p>本程序的数据放在 <code id="install-data-dir">-</code>。安装和卸载前，被替换的文件夹都会先备份到这里的 <code>backups</code>。</p>
-          <p class="console-note" id="install-package-note"></p>
-        </div>
+      <section id="install" class="page" data-width="narrow">
+        <header class="page-header"><div class="page-title"><h2>安装与路径<button type="button" class="help-btn" data-help="install" aria-expanded="false" aria-controls="help-install" title="展开说明">?</button></h2><p class="page-sub">先填路径并保存，再安装插件和扩展，需要的话再导入旧数据。</p></div></header>
+        <div class="help-panel" id="help-install" hidden><p>顺序：<strong>① 填好下面的路径并保存</strong>（没有的留空）→ <strong>② 安装 AstrBot 插件和 ST 扩展</strong> → ③ 需要的话导入旧数据、安装额外依赖。</p><p>本程序的数据放在 <code id="install-data-dir">-</code>。安装和卸载前，被替换的文件夹都会先备份到这里的 <code>backups</code>。</p><p class="console-note" id="install-package-note"></p></div>
 
         <div class="card console-form-card" id="install-paths-card">
           <div class="card-header"><h3>路径</h3><button type="button" class="btn btn-secondary btn-sm" id="install-check">检查路径</button></div>
@@ -97,7 +129,7 @@
 
         <div class="card console-form-card" id="install-napcat-card" hidden>
           <div class="card-header"><h3>NapCat</h3></div>
-          <p class="console-note">按钮会在新的命令行窗口里运行上面选好的启动文件，不会读取 NapCat 的任何文件。连接地址和令牌在“<a href="#system/platform" data-goto="system/platform">系统 › 聊天平台</a>”页。</p>
+          <p class="console-note">按钮会在新的命令行窗口里运行上面选好的启动文件，不会读取 NapCat 的任何文件。连接地址和令牌在“<a href="#connect" data-goto="connect">接入</a>”页。</p>
           <div class="console-actions"><button type="button" class="btn btn-secondary" id="install-napcat-start">启动 NapCat</button></div>
           <p class="console-note" id="install-napcat-result"></p>
         </div>
@@ -122,7 +154,49 @@
         </div>
       </section>
 
-      <section id="voice" class="page">
+      <section id="connect" class="page" data-width="narrow">
+        <header class="page-header"><div><h2>接入</h2></div></header>
+        <div class="card console-form-card">
+          <h3>聊天平台</h3>
+          <p class="console-note">同一时间只有一个聊天平台在工作：<strong>AstrBot</strong>（QQ 官方机器人，经 AstrBot 插件连接）或 <strong>NapCat</strong>（QQ 小号，NapCat 直接连核心）。两个平台是两个独立的角色实例，好感度、主人各算各的，不互通。切换保存后立即生效，不用重载；切换不会动 ST（要换角色或聊天请自己在 ST 里切）。</p>
+          <form id="chatplat-form" class="console-form">
+            <label class="field"><span class="field-label">使用的平台</span><select id="chatplat-active" class="select"><option value="astrbot">AstrBot（QQ 官方机器人）</option><option value="napcat">NapCat（QQ 小号）</option></select><small class="field-help" id="chatplat-choice-note"></small><small class="field-msg" hidden></small></label>
+            <label class="field"><span class="field-label">NapCat 主人 QQ 号</span><input id="chatplat-owner" type="text" maxlength="20" inputmode="numeric" autocomplete="off" spellcheck="false"><small class="field-help">只有主人的私聊会交给 ST，也只有主人能用 /好感度设置、stbridge_recover。这是 NapCat 平台的主人；不想自己查 QQ 号，可以在下面的“主人”卡片点“认领主人”（先在上面选好 NapCat 并保存）。AstrBot 的主人也在下面的“主人”卡片里。</small><small class="field-msg" hidden></small></label>
+            <label class="field field-wide"><span class="field-label">NapCat 群白名单</span><textarea id="chatplat-groups" class="input" rows="4" spellcheck="false" placeholder="每行一个群号，也可以用逗号或空格分隔"></textarea><small class="field-help">NapCat 只在名单里的群回复（被 @ 或以“/昵称”“昵称”开头才会回）；名单为空就一个群也不回。名单外的群消息完全忽略。</small><small class="field-empty" id="chatplat-groups-empty" hidden>还没有群 · 在上面填群号，一行一个；名单为空时 NapCat 一个群也不回。</small><small class="field-msg" hidden></small></label>
+          </form>
+          <p class="console-note" id="chatplat-wake-note"></p>
+        </div>
+        <div class="card console-form-card">
+          <h3>NapCat 连接</h3>
+          <div class="info-item"><span class="label">状态</span><span id="chatplat-status" class="value">-</span></div>
+          <p class="console-note console-note-error" id="chatplat-format-warning" hidden></p>
+          <div class="info-item"><span class="label">地址（URL）</span><span class="value"><code id="chatplat-url">-</code> <button type="button" class="btn btn-secondary btn-sm" id="chatplat-copy-url">复制</button></span></div>
+          <div class="info-item"><span class="label">令牌（Token）</span><span class="value"><code id="chatplat-token">-</code> <button type="button" class="btn btn-secondary btn-sm" id="chatplat-show-token" hidden>显示</button> <button type="button" class="btn btn-secondary btn-sm" id="chatplat-copy-token">复制</button></span></div>
+          <p class="console-note">在 NapCat WebUI 的“网络配置”里新建一个<strong>WebSocket 客户端</strong>：把上面的地址填进 URL，令牌填进 Token，<strong>消息格式选 array</strong>，保存时勾选启用。连上后这里会显示“已连接”和小号 QQ 号。令牌只在本机有效，不要发给别人。核心由发布包里的 start.bat 启动，不需要 AstrBot。</p>
+        </div>
+        <div class="card console-form-card">
+          <h3>主人</h3>
+          <p class="console-note">只有主人的私聊会交给 ST，主人也是唯一能用 /stbridge_recover 和 /好感度设置 的人。最省事的办法是点“认领主人”：页面会给你一个 6 位数字，你用自己的 QQ <strong>私聊</strong>机器人，只发这 6 位数字就行，不用自己找 ID。认领的是当前使用的聊天平台（AstrBot 或 NapCat，在上面的“聊天平台”卡片里切换）的主人。</p>
+          <div class="info-item"><span class="label">当前主人</span><span id="owner-current" class="value">-</span></div>
+          <div class="console-actions"><button type="button" class="btn btn-primary btn-sm" id="owner-claim-start">认领主人</button><small class="field-help" id="owner-claim-note"></small></div>
+          <div id="owner-claim-box" class="info-item" hidden><span class="label">验证码</span><span class="value"><strong id="owner-claim-code" class="claim-code"></strong></span></div>
+          <form id="owner-form" class="console-form">
+            <details class="module" data-module="owner-manual"><summary>手动填写</summary><div class="module-body">
+              <p class="console-note field-wide">这两项必须和私聊事件里的<strong>平台 ID</strong>、<strong>发送者 ID</strong>完全一致（平台 ID 是 AstrBot“消息平台”里这个机器人的 ID，不是 qq_official；发送者 ID 是你的 QQ 在这个平台里的一长串 ID）。两项都留空就没有主人，所有私聊都不处理。NapCat 的主人 QQ 号在上面的“聊天平台”卡片里填。</p>
+              <label class="field"><span class="field-label">平台 ID</span><input id="owner-platform-id" type="text" maxlength="200" autocomplete="off" spellcheck="false"><small class="field-help">AstrBot“消息平台”里这个机器人的 ID，例如 default_1234567890</small><small class="field-msg" hidden></small></label>
+              <label class="field"><span class="field-label">发送者 ID</span><input id="owner-sender-id" type="text" maxlength="200" autocomplete="off" spellcheck="false"><small class="field-help">主人私聊时 AstrBot 看到的发送者 ID</small><small class="field-msg" hidden></small></label>
+            </div></details>
+          </form>
+          <p class="console-note">修改后立即生效，不用重载。第一次启动时会从 AstrBot 插件配置里导入一次，以后只在这里改。好感度里“主人”那一条跟着这个 ID 走：换了 ID，就会换成新 ID 对应的好感度记录。</p>
+        </div>
+        <div class="card console-form-card">
+          <h3>消息排队</h3>
+          <form id="queue-settings-form" class="console-form"><label class="field"><span class="field-label">最多排队条数</span><span class="field-input"><input id="queue-max-waiting" type="number" min="1" max="20" step="1" required><span class="field-unit">条</span></span><small class="field-help">1～20，不含正在处理的</small><small class="field-msg" hidden></small></label><label class="field"><span class="field-label">最长等待</span><span class="field-input"><input id="queue-max-wait" type="number" min="30" max="600" step="1" required><span class="field-unit">秒</span></span><small class="field-help">30～600</small><small class="field-msg" hidden></small></label><label class="field"><span class="field-label">回复时限</span><span class="field-input"><input id="queue-reply-timeout" type="number" min="60" max="600" step="1" required><span class="field-unit">秒</span></span><small class="field-help">等 ST 生成回复的最长时间，超时这条就放弃 · 60～600；用长回复预设的可以调大，排队的强制释放时间 = 时限 + 120 秒</small><small class="field-msg" hidden></small></label></form>
+          <p class="console-note">多人同时发消息时按到达顺序依次回复；同一人在排队期间连发的消息会合并成一条。</p>
+        </div>
+      </section>
+
+      <section id="voice" class="page" data-width="narrow">
         <header class="page-header"><div><h2>语音</h2></div></header>
         <div class="card console-form-card" id="engine-card">
           <div class="card-header"><h3>语音引擎</h3><span id="service-state" class="status-badge">读取中...</span></div>
@@ -134,7 +208,8 @@
             <div class="info-item"><span class="label">地址</span><span id="service-address" class="value">-</span></div>
             <div class="info-item"><span class="label">目录</span><span id="service-dir" class="value">-</span></div>
           </div>
-          <div class="console-actions"><button type="button" class="btn btn-primary" id="service-start">启动服务</button><button type="button" class="btn btn-secondary" id="service-stop">关闭服务</button></div>
+          <div class="console-actions"><button type="button" class="btn btn-primary" id="service-start">启动服务</button><button type="button" class="btn btn-secondary" id="service-stop">关闭服务</button><button type="button" class="btn btn-secondary" id="voice-audition" title="用已保存的语音设置合成一句话并播放（不发到 QQ）">试听</button></div>
+          <p id="voice-audition-note" class="console-note" hidden></p>
           <p id="service-message" class="console-note"></p>
           <div class="label">日志最后 30 行（tts_service.log）</div>
           <pre id="service-log" class="service-log">-</pre>
@@ -143,13 +218,14 @@
             <form id="tts-common-form" class="console-form">
             <details class="module" data-module="voice-common-auto" open><summary>自动启停</summary><div class="module-body"><label class="field field-switch field-wide"><span class="field-text"><span class="field-label">自动启动服务</span><small class="field-help">需要语音而服务未运行时自动启动（首条语音会慢一些）</small></span><input name="auto_start" type="checkbox"></label><label class="field field-switch field-wide"><span class="field-text"><span class="field-label">退出时关闭服务</span><small class="field-help">AstrBot 关闭或插件重载时，一并关闭自己启动的服务</small></span><input name="stop_on_exit" type="checkbox"></label><label class="field"><span class="field-label">服务启动超时</span><span class="field-input"><input name="start_timeout" type="number" min="30" max="600" step="1" required><span class="field-unit">秒</span></span><small class="field-help">30～600</small><small class="field-msg" hidden></small></label></div></details>
             <details class="module" data-module="voice-common-trigger" open><summary>触发与发送</summary><div class="module-body"><label class="field"><span class="field-label">触发概率</span><span class="field-input"><input name="prob" type="number" min="0" max="100" step="any" required><span class="field-unit">%</span></span><small class="field-help">回复触发语音的概率 · 0～100</small><small class="field-msg" hidden></small></label><label class="field"><span class="field-label">冷却时间</span><span class="field-input"><input name="cooldown" type="number" min="0" max="3600" step="1" required><span class="field-unit">秒</span></span><small class="field-help">同一会话的语音冷却 · 0 表示不启用</small><small class="field-msg" hidden></small></label><label class="field field-switch field-wide"><span class="field-text"><span class="field-label">语音同时发文字</span><small class="field-help">发送语音时同时发送文字</small></span><input name="send_text_with_audio" type="checkbox"></label><label class="field field-switch field-wide"><span class="field-text"><span class="field-label">分条发</span><small class="field-help">一条回复有多组台词时，每组单独发一条；关闭时合成一条。AstrBot（QQ 官方机器人）每条消息只能回复约 5 次，组数别设太大。</small></span><input name="split_messages" type="checkbox"></label><label class="field"><span class="field-label">间隔</span><span class="field-input"><input name="split_interval" type="number" min="0" max="10" step="0.1" required><span class="field-unit">秒</span></span><small class="field-help">两组之间的间隔 · 0～10，语音合成较慢时以合成完成为准</small><small class="field-msg" hidden></small></label><label class="field"><span class="field-label">最多几条</span><span class="field-input"><input name="split_max" type="number" min="1" max="10" step="1" required><span class="field-unit">条</span></span><small class="field-help">超过的部分合并进最后一条 · 1～10</small><small class="field-msg" hidden></small></label></div></details>
-            <details class="module" data-module="voice-common-synth" open><summary>合成</summary><div class="module-body"><label class="field"><span class="field-label">合成请求超时</span><span class="field-input"><input name="tts_timeout_minutes" type="number" min="3" max="15" step="1" required><span class="field-unit">分钟</span></span><small class="field-help">3～15</small><small class="field-msg" hidden></small></label><label class="field"><span class="field-label">最长朗读文本</span><span class="field-input"><input name="text_limit" type="number" min="0" max="10000" step="1" required><span class="field-unit">字</span></span><small class="field-help">0 表示不限制，超过将截断</small><small class="field-msg" hidden></small></label></div></details>
+            <details class="module" data-module="voice-common-synth" open><summary>合成</summary><div class="module-body"><label class="field"><span class="field-label">合成请求超时</span><span class="field-input"><input name="tts_timeout_minutes" type="number" min="3" max="15" step="1" required><span class="field-unit">分钟</span></span><small class="field-help">3～15</small><small class="field-msg" hidden></small></label><label class="field"><span class="field-label">语音等待上限</span><span class="field-input"><input name="voice_wait_seconds" type="number" min="10" max="300" step="1" required><span class="field-unit">秒</span></span><small class="field-help">文字和语音一起发时，语音超过这个时间还没好就只发文字 · 10～300</small><small class="field-msg" hidden></small></label><label class="field"><span class="field-label">最长朗读文本</span><span class="field-input"><input name="text_limit" type="number" min="0" max="10000" step="1" required><span class="field-unit">字</span></span><small class="field-help">0 表示不限制，超过将截断</small><small class="field-msg" hidden></small></label></div></details>
           </form>
           </details>
         </div>
         <div id="voice-current">
           <div id="voice-irodori">
-        <div class="card console-note-card"><p>Irodori 用<strong>情绪的 caption 和句首表情</strong>控制语气，不需要参考音频。</p><details class="more"><summary>了解更多</summary><p>Irodori 用<strong>情绪的 caption（日文风格描述）和句首表情</strong>控制语气，<strong>不需要参考音频</strong>。每个情绪的 caption 和表情在“角色和情绪”页每个情绪的卡片里设置；情绪没有 caption 时使用下面的默认 caption。</p><p>修改地址、端口、目录、基础模型会关闭插件已启动的 Irodori 服务，下一条语音按新参数重新启动；其他参数立即生效，不重启服务。</p></details></div>
+        <div class="help-lead"><p class="page-sub">Irodori 用<strong>情绪的 caption 和句首表情</strong>控制语气，不需要参考音频。</p><button type="button" class="help-btn" data-help="voice-irodori" aria-expanded="false" aria-controls="help-voice-irodori" title="展开说明">?</button></div>
+        <div class="help-panel" id="help-voice-irodori" hidden><p>Irodori 用<strong>情绪的 caption 和句首表情</strong>控制语气，不需要参考音频。</p><p>Irodori 用<strong>情绪的 caption（日文风格描述）和句首表情</strong>控制语气，<strong>不需要参考音频</strong>。每个情绪的 caption 和表情在“角色和情绪”页每个情绪的卡片里设置；情绪没有 caption 时使用下面的默认 caption。</p><p>修改地址、端口、目录、基础模型会关闭插件已启动的 Irodori 服务，下一条语音按新参数重新启动；其他参数立即生效，不重启服务。</p></div>
         <div class="card console-form-card">
           <h3>服务与模型</h3>
           <form id="irodori-form" class="console-form">
@@ -187,7 +263,7 @@
         </details>
       </section>
 
-      <section id="emotions" class="page">
+      <section id="emotions" class="page" data-width="narrow">
         <header class="page-header"><div><h2>角色和情绪</h2></div></header>
         <div class="card console-form-card" id="character-top">
           <h3>角色</h3>
@@ -221,7 +297,7 @@
         <div id="emotions-list" class="console-emotions"><p class="placeholder">选择角色后查看情绪。</p></div>
       </section>
 
-      <section id="stickers" class="page">
+      <section id="stickers" class="page" data-width="mixed">
         <header class="page-header"><div><h2>表情包</h2></div></header>
         <div class="card console-form-card">
           <h3>发送设置</h3>
@@ -236,9 +312,9 @@
         <div id="sticker-list" class="audios-container"><p class="placeholder">读取中...</p></div>
       </section>
 
-      <section id="schedule" class="page">
-        <header class="page-header"><div><h2>定时计划</h2></div></header>
-        <div class="card console-note-card"><p><span class="nick">琴音</span>会按计划主动给你（或某个群）发消息，由 ST 用她自己的口吻来写。</p><details class="more"><summary>了解更多</summary><p><span class="nick">琴音</span>会按计划主动给你（或某个群）发消息：到点时把“要求”和当前时间交给 ST，由<span class="nick">琴音</span>用自己的口吻写，照常带语音和表情包；ST 忙或失败时，从备用文字里随机发一句。目标会话最近有人说话时会先等一等（见下面的安静时间）。预设计划只是首次写入的普通计划，全部默认关闭，可以随意修改、删除。</p></details></div>
+      <section id="schedule" class="page" data-width="narrow">
+        <header class="page-header"><div class="page-title"><h2>定时计划<button type="button" class="help-btn" data-help="schedule" aria-expanded="false" aria-controls="help-schedule" title="展开说明">?</button></h2><p class="page-sub"><span class="nick">琴音</span>会按计划主动给你（或某个群）发消息，由 ST 用她自己的口吻来写。</p></div></header>
+        <div class="help-panel" id="help-schedule" hidden><p><span class="nick">琴音</span>会按计划主动给你（或某个群）发消息，由 ST 用她自己的口吻来写。</p><p><span class="nick">琴音</span>会按计划主动给你（或某个群）发消息：到点时把“要求”和当前时间交给 ST，由<span class="nick">琴音</span>用自己的口吻写，照常带语音和表情包；ST 忙或失败时，从备用文字里随机发一句。目标会话最近有人说话时会先等一等（见下面的安静时间）。预设计划只是首次写入的普通计划，全部默认关闭，可以随意修改、删除。</p></div>
         <div class="card console-form-card">
           <h3>总设置</h3>
           <form id="schedule-settings-form" class="console-form">
@@ -305,11 +381,11 @@
         <div id="plan-list" class="audios-container"><p class="placeholder">读取中...</p></div>
       </section>
 
-      <section id="sing" class="page">
-        <header class="page-header"><div><h2>唱歌</h2></div></header>
-        <div class="card console-note-card"><p>上传一首歌，<span class="nick">琴音</span>用 RVC 唱出来：去伴奏和混响、换成她的声音、再和伴奏混合。</p><details class="more"><summary>了解更多</summary><p>上传一首歌，<span class="nick">琴音</span>用 RVC 唱出来：先截取一段（默认从歌曲约 30% 处开始，60 秒），用 Roformer 模型去掉伴奏、再去掉人声里的混响，把干净的人声换成琴音的声音，再和伴奏混在一起。第一次处理需要加载模型，会比较慢；相同的歌和参数会直接用缓存。RVC 工作进程只在需要时启动，闲置一段时间后自动关闭。</p></details></div>
+      <section id="sing" class="page" data-tabbed>
+        <header class="page-header"><div class="page-title"><h2>唱歌<button type="button" class="help-btn" data-help="sing" aria-expanded="false" aria-controls="help-sing" title="展开说明">?</button></h2><p class="page-sub">上传一首歌，<span class="nick">琴音</span>用 RVC 唱出来：去伴奏和混响、换成她的声音、再和伴奏混合。</p></div></header>
+        <div class="help-panel" id="help-sing" hidden><p>上传一首歌，<span class="nick">琴音</span>用 RVC 唱出来：去伴奏和混响、换成她的声音、再和伴奏混合。</p><p>上传一首歌，<span class="nick">琴音</span>用 RVC 唱出来：先截取一段（默认从歌曲约 30% 处开始，60 秒），用 Roformer 模型去掉伴奏、再去掉人声里的混响，把干净的人声换成琴音的声音，再和伴奏混在一起。第一次处理需要加载模型，会比较慢；相同的歌和参数会直接用缓存。RVC 工作进程只在需要时启动，闲置一段时间后自动关闭。</p></div>
         <div class="tabs" id="sing-tabs" role="tablist" aria-label="唱歌"><button type="button" class="tab" role="tab" data-tab="library">歌库<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="params">翻唱参数<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="chat">聊天点歌<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="service">服务与缓存<span class="tab-dot" hidden>●</span></button></div>
-        <div class="tab-panel" data-tab="library">
+        <div class="tab-panel" data-tab="library" data-width="wide">
         <div class="card console-form-card">
           <h3>歌库</h3>
           <div class="toolbar-left"><label class="btn btn-primary file-button">上传歌曲（可多选）<input type="file" id="song-file" multiple accept=".mp3,.flac,.wav,.m4a,.ogg"></label></div>
@@ -395,9 +471,9 @@
         </div>
       </section>
 
-      <section id="affinity" class="page">
-        <header class="page-header"><div><h2>好感度</h2></div></header>
-        <div class="card console-note-card"><p>好感度分所有者（私聊对象）和群友两条轨道，各有自己的范围和档位。</p><details class="more"><summary>了解更多</summary><p>好感度分两条轨道。<strong>所有者</strong>（私聊对象）写入 <code>stat_data.&lt;角色&gt;.好感度[0]</code>（0～100）；<strong>群友</strong>每人单独一份，写入 <code>stat_data.&lt;变量名&gt;[0]</code>（范围见下方设置）。群聊轮次里 <code>&lt;角色&gt;.好感度</code> 仍是所有者的值（群友改不了），私聊轮次里群友变量为 null。生成后只按回复中发言人所属轨道的 <code>_.add</code> 更新。群友记录以 <code>group:</code> 开头的内部键保存，同一个人在所有群里共用一份，并且与私聊里的所有者记录分开（所有者在群里发言时会显示为两行）。</p></details></div>
+      <section id="affinity" class="page" data-width="mixed">
+        <header class="page-header"><div class="page-title"><h2>好感度<button type="button" class="help-btn" data-help="affinity" aria-expanded="false" aria-controls="help-affinity" title="展开说明">?</button></h2><p class="page-sub">好感度分所有者（私聊对象）和群友两条轨道，各有自己的范围和档位。</p></div></header>
+        <div class="help-panel" id="help-affinity" hidden><p>好感度分所有者（私聊对象）和群友两条轨道，各有自己的范围和档位。</p><p>好感度分两条轨道。<strong>所有者</strong>（私聊对象）写入 <code>stat_data.&lt;角色&gt;.好感度[0]</code>（0～100）；<strong>群友</strong>每人单独一份，写入 <code>stat_data.&lt;变量名&gt;[0]</code>（范围见下方设置）。群聊轮次里 <code>&lt;角色&gt;.好感度</code> 仍是所有者的值（群友改不了），私聊轮次里群友变量为 null。生成后只按回复中发言人所属轨道的 <code>_.add</code> 更新。群友记录以 <code>group:</code> 开头的内部键保存，同一个人在所有群里共用一份，并且与私聊里的所有者记录分开（所有者在群里发言时会显示为两行）。</p></div>
         <div class="card console-form-card">
           <h3>设置</h3>
           <form id="affinity-settings-form" class="console-form">
@@ -410,9 +486,9 @@
         <div id="affinity-users" class="console-list"><p class="placeholder">加载中...</p></div>
       </section>
 
-      <section id="injection" class="page">
-        <header class="page-header"><div><h2>ST 注入</h2></div></header>
-        <div class="card console-note-card"><p>STbridge 需要模型遵守几条规则：情绪标签、game 标签、中日双语、唱歌标签、好感度更新。这里编辑这些规则的条目；<strong>改完保存后，到 ST 的 STbridge 扩展面板点「同步」</strong>，扩展才会把它们写进当前的 ST 预设和全局世界书「STbridge」。</p><details class="more"><summary>了解更多</summary><p>每个条目可以写进<strong>预设</strong>（直接写进你当前正在用的 Chat Completion 预设，默认放在 Chat History 之后，模型最听话）或<strong>世界书</strong>（单独的全局世界书「STbridge」，不动你自己的世界书）。条目可以关掉、删除、调整顺序，也可以自己新增。内置条目删了以后能点“恢复内置条目”找回。扩展只增删带 STbridge 标记的条目，你自己的预设条目和世界书不会被改动，随时可以在扩展面板点「移除」恢复原样。不点「同步」，ST 里什么都不会变。</p></details></div>
+      <section id="injection" class="page" data-width="narrow">
+        <header class="page-header"><div class="page-title"><h2>ST 注入<button type="button" class="help-btn" data-help="injection" aria-expanded="false" aria-controls="help-injection" title="展开说明">?</button></h2><p class="page-sub">STbridge 需要模型遵守几条规则：情绪标签、game 标签、中日双语、唱歌标签、好感度更新。这里编辑这些规则的条目；<strong>改完保存后，到 ST 的 STbridge 扩展面板点「同步」</strong>，扩展才会把它们写进当前的 ST 预设和全局世界书「STbridge」。</p></div></header>
+        <div class="help-panel" id="help-injection" hidden><p>STbridge 需要模型遵守几条规则：情绪标签、game 标签、中日双语、唱歌标签、好感度更新。这里编辑这些规则的条目；<strong>改完保存后，到 ST 的 STbridge 扩展面板点「同步」</strong>，扩展才会把它们写进当前的 ST 预设和全局世界书「STbridge」。</p><p>每个条目可以写进<strong>预设</strong>（直接写进你当前正在用的 Chat Completion 预设，默认放在 Chat History 之后，模型最听话）或<strong>世界书</strong>（单独的全局世界书「STbridge」，不动你自己的世界书）。条目可以关掉、删除、调整顺序，也可以自己新增。内置条目删了以后能点“恢复内置条目”找回。扩展只增删带 STbridge 标记的条目，你自己的预设条目和世界书不会被改动，随时可以在扩展面板点「移除」恢复原样。不点「同步」，ST 里什么都不会变。</p></div>
         <div class="card console-form-card">
           <h3>条目</h3>
           <form id="injection-form" class="console-form" onsubmit="return false">
@@ -423,12 +499,106 @@
         <div class="card"><div class="card-header"><h3>可用的宏</h3></div><div class="card-body"><p class="console-note">条目里可以写下面的宏，ST 每次生成时会换成当前这一轮的值（由 STbridge 随每条消息下发；不是从 QQ 来的生成用最近一次的值）。ST 自己的 <code>{{char}}</code>、<code>{{user}}</code> 照常可用。</p><div id="injection-macros" class="console-list"></div></div></div>
       </section>
 
-      <section id="system" class="page">
+      <section id="system" class="page" data-tabbed>
         <header class="page-header"><div><h2>系统</h2></div></header>
-        <div class="tabs" id="system-tabs" role="tablist" aria-label="系统"><button type="button" class="tab" role="tab" data-tab="general">常规<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="platform">聊天平台<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="texts">回复文案<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="logs">日志<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="cleanup">存储清理<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="about">关于<span class="tab-dot" hidden>●</span></button></div>
+        <div class="tabs" id="system-tabs" role="tablist" aria-label="系统"><button type="button" class="tab" role="tab" data-tab="general">常规<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="texts">回复文案<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="logs">日志<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="cleanup">存储清理<span class="tab-dot" hidden>●</span></button><button type="button" class="tab" role="tab" data-tab="about">关于<span class="tab-dot" hidden>●</span></button></div>
         <div class="tab-panel" data-tab="general">
-        <div class="card console-form-card" id="preset-card">
-          <h3>总预设</h3>
+        <div class="card console-form-card">
+          <h3>端口</h3>
+          <p class="console-note">只能本机访问（127.0.0.1），地址不能改，端口可以改。端口在<strong>核心启动时</strong>读取，保存后要重启核心（关掉 start.bat 的窗口再运行一次）才生效；改了 bridge 端口，还要在 ST 扩展设置里把“bridge 端口”改成一样的。五个端口必须各不相同，也不能和语音服务、翻唱端口重复。</p>
+          <div class="console-actions"><button type="button" class="btn btn-secondary btn-sm" id="restart-core">重启核心</button><small class="field-help" id="restart-core-note">改端口后用它让新端口生效；页面会自动重新连接。</small></div>
+          <form id="network-form" class="console-form">
+            <label class="field"><span class="field-label">ST 端口</span><input id="network-st-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">ST 页面所在的端口，bridge 只接受来自这个来源的请求</small><small class="field-msg" hidden></small></label>
+            <label class="field"><span class="field-label">bridge 端口</span><input id="network-bridge-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">ST 扩展连接的端口</small><small class="field-msg" hidden></small></label>
+            <label class="field"><span class="field-label">控制台端口</span><input id="network-console-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">就是这个页面的端口</small><small class="field-msg" hidden></small></label>
+            <label class="field"><span class="field-label">连接器端口</span><input id="network-connector-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">AstrBot 插件（以及以后的其他连接器）连接核心的端口</small><small class="field-msg" hidden></small></label>
+            <label class="field"><span class="field-label">NapCat 端口</span><input id="network-onebot-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">NapCat 连接核心的端口（填进 NapCat 的网络配置，见“聊天平台”页）</small><small class="field-msg" hidden></small></label>
+          </form>
+          <p class="console-note" id="network-note"></p>
+        </div>
+        </div>
+        <div class="tab-panel" data-tab="texts" hidden>
+        <div class="card console-form-card">
+          <h3>回复文案</h3>
+          <p class="console-note">机器人在出错、排队、点歌时说的固定话。<code>{昵称}</code> 会换成当前角色的昵称（现在是“<span class="nick">琴音</span>”）；点歌相关的话还能用下面写明的其它占位符。每句 1～100 字；“每行一句”的项目每组 1～10 句，发送时随机选一句。</p>
+          <p id="texts-notice" class="console-note console-note-error" hidden></p>
+          <div id="texts-list" class="console-form"><p class="placeholder">读取中...</p></div>
+        </div>
+        </div>
+        <div class="tab-panel" data-tab="logs" data-width="wide" hidden>
+        <div class="card console-form-card">
+          <h3>核心日志</h3>
+          <p class="console-note">核心每天写一个日志文件（保存在插件数据目录的 <code>logs</code> 文件夹，保留最近 7 天）。日志里没有聊天原文，用户 ID 只显示哈希。AstrBot 后台也能看到同样的内容。</p>
+          <div class="console-actions">
+            <label class="console-inline-label"><span>显示最近</span> <select id="logs-lines" class="select" aria-label="日志行数"><option value="100">100 行</option><option value="300" selected>300 行</option><option value="1000">1000 行</option></select></label>
+            <button type="button" class="btn btn-secondary" id="logs-refresh">刷新</button>
+            <label class="console-check"><input type="checkbox" id="logs-auto"> 自动刷新（每 5 秒）</label>
+            <a class="btn btn-secondary" id="logs-download" href="/api/logs/download" download="st-bridge-logs.zip">下载全部日志（zip）</a>
+            <a class="btn btn-secondary" id="logs-diagnostics" href="/api/diagnostics/download" download="st-bridge-diagnostics.zip" title="日志、状态、版本和脱敏后的设置摘要打成一个 zip；不含聊天内容、密钥、路径和 QQ 号">导出诊断包</a>
+          </div>
+          <div class="console-actions log-filters">
+            <input type="search" id="logs-filter" class="input" placeholder="按关键字筛选（不分大小写）" aria-label="日志关键字筛选" autocomplete="off" spellcheck="false">
+            <label class="console-inline-label"><span>级别</span> <select id="logs-level" class="select" aria-label="日志级别"><option value="all">全部</option><option value="warning">警告以上</option><option value="error">仅错误</option></select></label>
+            <small class="field-help" id="logs-count"></small>
+          </div>
+          <pre id="logs-view" class="service-log log-view" tabindex="0" aria-label="核心日志">读取中...</pre>
+          <p class="console-note" id="logs-files"></p>
+        </div>
+        </div>
+        <div class="tab-panel" data-tab="cleanup" hidden>
+        <div class="help-lead"><p class="page-sub">只清理超过保留天数的临时文件，不删目录。</p><button type="button" class="help-btn" data-help="system-cleanup" aria-expanded="false" aria-controls="help-system-cleanup" title="展开说明">?</button></div>
+        <div class="help-panel" id="help-system-cleanup" hidden><p>只清理超过保留天数的临时文件，不删目录。</p><p>发送语音和图片时，AstrBot 会在临时目录里留下文件且不会自动删除。这里只清理这些临时文件：只删超过保留天数的普通文件，不删目录，任何 1 小时内的文件都不会动。歌库、翻唱缓存、RVC / Irodori 自己的工具目录不参与清理。</p></div>
+        <div class="card console-form-card">
+          <h3>占用情况</h3>
+          <div id="cleanup-stats"><p class="placeholder">读取中...</p></div>
+          <div class="console-actions"><button class="btn btn-primary" id="cleanup-run">立即清理</button></div>
+          <p class="console-note" id="cleanup-result"></p>
+          <div class="cover-row"><strong>插件/扩展备份</strong><span id="cleanup-install-backups">读取中...</span><button class="btn btn-danger-ghost btn-sm" id="cleanup-clear-backups">只保留最新一份</button><small>重装插件或 ST 扩展前，会把旧文件夹备份到数据目录的 backups 里；装好后每种只留最新 3 份，这里可以再清到 1 份。只动这两种备份，预设备份等其他文件不受影响。</small></div>
+          <div class="cover-row"><strong>翻唱缓存</strong><span id="cleanup-cover-cache"></span><button class="btn btn-danger-ghost btn-sm" id="cleanup-clear-covers">清空</button><small>只删除已生成的翻唱，歌库里的歌不受影响；有翻唱正在生成或排队时不能清空。逐条管理在“唱歌 › 服务与缓存”。</small></div>
+        </div>
+        <div class="card console-form-card">
+          <h3>自动清理</h3>
+          <form id="cleanup-settings-form" class="console-form">
+            <label class="field field-switch field-wide"><span class="field-text"><span class="field-label">每天自动清理一次</span></span><input id="cleanup-enabled" type="checkbox"></label>
+            <label class="field"><span class="field-label">保留天数</span><span class="field-input"><input id="cleanup-days" type="number" min="1" max="365" step="1" required><span class="field-unit">天</span></span><small class="field-help">1～365，更早的文件会被清理</small><small class="field-msg" hidden></small></label>
+            
+          </form>
+          <p class="console-note" id="cleanup-last"></p>
+        </div>
+        </div>
+        <div class="tab-panel" data-tab="about" hidden>
+        <div class="section-header console-section-title"><h3>配置说明</h3></div>
+        <div class="help-lead"><p class="page-sub">配置保存在核心数据目录（发布目录里的 data\）的 config.json，修改后立即生效，不需要重启核心。</p><button type="button" class="help-btn" data-help="system-about" aria-expanded="false" aria-controls="help-system-about" title="展开说明">?</button></div>
+        <div class="help-panel" id="help-system-about" hidden><p>配置保存在核心数据目录（发布目录里的 data\）的 config.json，修改后立即生效，不需要重启核心。</p><p>语音引擎设置、模型路径、角色和情绪参数都保存在核心数据目录（发布目录里的 <code>data\config.json</code>），修改后立即生效，不需要重启核心。保存采用临时文件加原子替换；配置损坏时控制台不会启动，也不会覆盖原文件。</p><p>控制台不需要令牌：只接受本机地址访问，并拒绝来自其他网页的跨站修改请求。</p><p><strong>保存规则：</strong>改输入框、勾选框、下拉框、滑块只是修改，要点页面底部的“保存”才生效（有未保存的修改时才会出现保存栏）；按钮则是立即执行的动作，比如切换引擎、启动或关闭服务、上传、删除、立即试发。</p></div>
+        </div>
+      </section>
+          <div class="save-bar" id="save-bar" role="region" aria-label="未保存的修改" hidden>
+        <div class="save-bar-text"><strong id="save-bar-count"></strong><span id="save-bar-error" class="save-bar-error" hidden></span></div>
+        <div class="save-bar-actions"><button class="btn btn-secondary" type="button" id="save-bar-discard">放弃</button><button class="btn btn-primary" type="button" id="save-bar-save">保存</button></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer-overlay" id="drawer-overlay" hidden></div>
+
+  <div class="dialog-overlay" id="path-picker" hidden>
+    <div class="dialog dialog-lg" role="dialog" aria-modal="true" aria-labelledby="path-picker-title">
+      <div class="dialog-header"><h3 id="path-picker-title">选择路径</h3><button class="close-btn" type="button" id="path-picker-close" aria-label="关闭">✕</button></div>
+      <div class="dialog-body">
+        <div class="path-picker-bar"><button class="btn btn-secondary btn-sm" type="button" id="path-picker-up">↑ 上一级</button><select id="path-picker-drives" class="select"></select><input id="path-picker-current" class="input" placeholder="输入路径后按回车"></div>
+        <ul id="path-picker-list" class="path-picker-list" role="listbox" aria-label="目录内容"></ul>
+        <p id="path-picker-hint" class="console-note"></p>
+      </div>
+      <div class="dialog-footer"><button class="btn btn-secondary" type="button" id="path-picker-cancel">取消</button><button class="btn btn-primary" type="button" id="path-picker-choose">选择</button></div>
+    </div>
+  </div>
+
+  <div class="dialog-overlay" id="preset-modal" hidden>
+    <div class="dialog dialog-lg" role="dialog" aria-modal="true" aria-labelledby="preset-modal-title">
+      <div class="dialog-header"><h3 id="preset-modal-title">总预设</h3><button class="close-btn" type="button" id="preset-modal-close" aria-label="关闭">✕</button></div>
+      <div class="dialog-body">
+        <div class="preset-switch-row"><span class="label">当前预设</span><span id="preset-modal-current" class="value">-</span><select id="preset-select" class="select preset-overview-select" aria-label="切换预设"><option value="">切换预设…</option></select></div>
+        <div class="console-form-card" id="preset-card">
           <p class="console-note">预设保存的是全部设置（语音、情绪、表情包、定时计划、唱歌、好感度规则、回复文案等），不包含好感度数值等运行数据、歌库和表情包等文件、API 密钥和端口。设置里写的文件路径只当文字保存，文件本身不会带走。切换预设前会自动把当前设置存成“切换前”存档，随时可以切回去。</p>
           <div id="preset-list" class="console-list"><p class="placeholder">读取中...</p></div>
           <details class="emotion-editor" id="preset-auto-details">
@@ -446,117 +616,31 @@
           </div>
           <p class="console-note preset-result" id="preset-result" hidden></p>
         </div>
-        <div class="card console-form-card">
-          <h3>消息排队</h3>
-          <form id="queue-settings-form" class="console-form"><label class="field"><span class="field-label">最多排队条数</span><span class="field-input"><input id="queue-max-waiting" type="number" min="1" max="20" step="1" required><span class="field-unit">条</span></span><small class="field-help">1～20，不含正在处理的</small><small class="field-msg" hidden></small></label><label class="field"><span class="field-label">最长等待</span><span class="field-input"><input id="queue-max-wait" type="number" min="30" max="600" step="1" required><span class="field-unit">秒</span></span><small class="field-help">30～600</small><small class="field-msg" hidden></small></label></form>
-          <p class="console-note">多人同时发消息时按到达顺序依次回复；同一人在排队期间连发的消息会合并成一条。</p>
-        </div>
-        <div class="card console-form-card">
-          <h3>主人</h3>
-          <p class="console-note">只有主人的私聊会交给 ST，主人也是唯一能用 /stbridge_recover 和 /好感度设置 的人。这两项必须和私聊事件里的<strong>平台 ID</strong>、<strong>发送者 ID</strong>完全一致（平台 ID 是 AstrBot“消息平台”里这个机器人的 ID，发送者 ID 是你的 QQ 在这个平台里的 ID）。两项都留空就没有主人，所有私聊都不处理。</p>
-          <form id="owner-form" class="console-form">
-            <label class="field"><span class="field-label">平台 ID</span><input id="owner-platform-id" type="text" maxlength="200" autocomplete="off" spellcheck="false"><small class="field-help">例如 qq_official 平台在 AstrBot 里的 ID</small><small class="field-msg" hidden></small></label>
-            <label class="field"><span class="field-label">发送者 ID</span><input id="owner-sender-id" type="text" maxlength="200" autocomplete="off" spellcheck="false"><small class="field-help">主人私聊时 AstrBot 看到的发送者 ID</small><small class="field-msg" hidden></small></label>
-          </form>
-          <p class="console-note">修改后立即生效，不用重载。第一次启动时会从 AstrBot 插件配置里导入一次，以后只在这里改。好感度里“主人”那一条跟着这个 ID 走：换了 ID，就会换成新 ID 对应的好感度记录。</p>
-        </div>
-        <div class="card console-form-card">
-          <h3>端口</h3>
-          <p class="console-note">只能本机访问（127.0.0.1），地址不能改，端口可以改。端口在<strong>核心启动时</strong>读取，保存后要重启核心（关掉 start.bat 的窗口再运行一次）才生效；改了 bridge 端口，还要在 ST 扩展设置里把“bridge 端口”改成一样的。五个端口必须各不相同，也不能和语音服务、翻唱端口重复。</p>
-          <div class="console-actions"><button type="button" class="btn btn-secondary btn-sm" id="restart-core">重启核心</button><small class="field-help" id="restart-core-note">改端口后用它让新端口生效；页面会自动重新连接。</small></div>
-          <form id="network-form" class="console-form">
-            <label class="field"><span class="field-label">ST 端口</span><input id="network-st-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">ST 页面所在的端口，bridge 只接受来自这个来源的请求</small><small class="field-msg" hidden></small></label>
-            <label class="field"><span class="field-label">bridge 端口</span><input id="network-bridge-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">ST 扩展连接的端口</small><small class="field-msg" hidden></small></label>
-            <label class="field"><span class="field-label">控制台端口</span><input id="network-console-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">就是这个页面的端口</small><small class="field-msg" hidden></small></label>
-            <label class="field"><span class="field-label">连接器端口</span><input id="network-connector-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">AstrBot 插件（以及以后的其他连接器）连接核心的端口</small><small class="field-msg" hidden></small></label>
-            <label class="field"><span class="field-label">NapCat 端口</span><input id="network-onebot-port" type="number" min="1024" max="65535" step="1" required><small class="field-help">NapCat 连接核心的端口（填进 NapCat 的网络配置，见“聊天平台”页）</small><small class="field-msg" hidden></small></label>
-          </form>
-          <p class="console-note" id="network-note"></p>
-        </div>
-        </div>
-        <div class="tab-panel" data-tab="platform" hidden>
-        <div class="card console-form-card">
-          <h3>聊天平台</h3>
-          <p class="console-note">同一时间只有一个聊天平台在工作：<strong>AstrBot</strong>（QQ 官方机器人，经 AstrBot 插件连接）或 <strong>NapCat</strong>（QQ 小号，NapCat 直接连核心）。两个平台是两个独立的角色实例，好感度、主人各算各的，不互通。切换保存后立即生效，不用重载；切换不会动 ST（要换角色或聊天请自己在 ST 里切）。</p>
-          <form id="chatplat-form" class="console-form">
-            <label class="field"><span class="field-label">使用的平台</span><select id="chatplat-active" class="select"><option value="astrbot">AstrBot（QQ 官方机器人）</option><option value="napcat">NapCat（QQ 小号）</option></select><small class="field-help" id="chatplat-choice-note"></small><small class="field-msg" hidden></small></label>
-            <label class="field"><span class="field-label">NapCat 主人 QQ 号</span><input id="chatplat-owner" type="text" maxlength="20" inputmode="numeric" autocomplete="off" spellcheck="false"><small class="field-help">只有主人的私聊会交给 ST，也只有主人能用 /好感度设置、stbridge_recover。这是 NapCat 平台的主人；AstrBot 的主人在“常规”页。</small><small class="field-msg" hidden></small></label>
-            <label class="field field-wide"><span class="field-label">NapCat 群白名单</span><textarea id="chatplat-groups" class="input" rows="4" spellcheck="false" placeholder="每行一个群号，也可以用逗号或空格分隔"></textarea><small class="field-help">NapCat 只在名单里的群回复（被 @ 或以“/昵称”“昵称”开头才会回）；名单为空就一个群也不回。名单外的群消息完全忽略。</small><small class="field-msg" hidden></small></label>
-          </form>
-          <p class="console-note" id="chatplat-wake-note"></p>
-        </div>
-        <div class="card console-form-card">
-          <h3>NapCat 连接</h3>
-          <div class="info-item"><span class="label">状态</span><span id="chatplat-status" class="value">-</span></div>
-          <p class="console-note console-note-error" id="chatplat-format-warning" hidden></p>
-          <div class="info-item"><span class="label">地址（URL）</span><span class="value"><code id="chatplat-url">-</code> <button type="button" class="btn btn-secondary btn-sm" id="chatplat-copy-url">复制</button></span></div>
-          <div class="info-item"><span class="label">令牌（Token）</span><span class="value"><code id="chatplat-token">-</code> <button type="button" class="btn btn-secondary btn-sm" id="chatplat-show-token" hidden>显示</button> <button type="button" class="btn btn-secondary btn-sm" id="chatplat-copy-token">复制</button></span></div>
-          <p class="console-note">在 NapCat WebUI 的“网络配置”里新建一个<strong>WebSocket 客户端</strong>：把上面的地址填进 URL，令牌填进 Token，<strong>消息格式选 array</strong>，保存时勾选启用。连上后这里会显示“已连接”和小号 QQ 号。令牌只在本机有效，不要发给别人。核心由发布包里的 start.bat 启动，不需要 AstrBot。</p>
-        </div>
-        </div>
-        <div class="tab-panel" data-tab="texts" hidden>
-        <div class="card console-form-card">
-          <h3>回复文案</h3>
-          <p class="console-note">机器人在出错、排队、点歌时说的固定话。<code>{昵称}</code> 会换成当前角色的昵称（现在是“<span class="nick">琴音</span>”）；点歌相关的话还能用下面写明的其它占位符。每句 1～100 字；“每行一句”的项目每组 1～10 句，发送时随机选一句。</p>
-          <p id="texts-notice" class="console-note console-note-error" hidden></p>
-          <div id="texts-list" class="console-form"><p class="placeholder">读取中...</p></div>
-        </div>
-        </div>
-        <div class="tab-panel" data-tab="logs" hidden>
-        <div class="card console-form-card">
-          <h3>核心日志</h3>
-          <p class="console-note">核心每天写一个日志文件（保存在插件数据目录的 <code>logs</code> 文件夹，保留最近 7 天）。日志里没有聊天原文，用户 ID 只显示哈希。AstrBot 后台也能看到同样的内容。</p>
-          <div class="console-actions">
-            <label class="console-inline-label"><span>显示最近</span> <select id="logs-lines" class="select" aria-label="日志行数"><option value="100">100 行</option><option value="300" selected>300 行</option><option value="1000">1000 行</option></select></label>
-            <button type="button" class="btn btn-secondary" id="logs-refresh">刷新</button>
-            <a class="btn btn-secondary" id="logs-download" href="/api/logs/download" download="st-bridge-logs.zip">下载全部日志（zip）</a>
-          </div>
-          <pre id="logs-view" class="service-log log-view" tabindex="0" aria-label="核心日志">读取中...</pre>
-          <p class="console-note" id="logs-files"></p>
-        </div>
-        </div>
-        <div class="tab-panel" data-tab="cleanup" hidden>
-        <div class="card console-note-card"><p>只清理超过保留天数的临时文件，不删目录。</p><details class="more"><summary>了解更多</summary><p>发送语音和图片时，AstrBot 会在临时目录里留下文件且不会自动删除。这里只清理这些临时文件：只删超过保留天数的普通文件，不删目录，任何 1 小时内的文件都不会动。歌库、翻唱缓存、RVC / Irodori 自己的工具目录不参与清理。</p></details></div>
-        <div class="card console-form-card">
-          <h3>占用情况</h3>
-          <div id="cleanup-stats"><p class="placeholder">读取中...</p></div>
-          <div class="console-actions"><button class="btn btn-primary" id="cleanup-run">立即清理</button></div>
-          <p class="console-note" id="cleanup-result"></p>
-          <div class="cover-row"><strong>翻唱缓存</strong><span id="cleanup-cover-cache"></span><button class="btn btn-danger-ghost btn-sm" id="cleanup-clear-covers">清空</button><small>只删除已生成的翻唱，歌库里的歌不受影响；有翻唱正在生成或排队时不能清空。逐条管理在“唱歌 › 服务与缓存”。</small></div>
-        </div>
-        <div class="card console-form-card">
-          <h3>自动清理</h3>
-          <form id="cleanup-settings-form" class="console-form">
-            <label class="field field-switch field-wide"><span class="field-text"><span class="field-label">每天自动清理一次</span></span><input id="cleanup-enabled" type="checkbox"></label>
-            <label class="field"><span class="field-label">保留天数</span><span class="field-input"><input id="cleanup-days" type="number" min="1" max="365" step="1" required><span class="field-unit">天</span></span><small class="field-help">1～365，更早的文件会被清理</small><small class="field-msg" hidden></small></label>
-            
-          </form>
-          <p class="console-note" id="cleanup-last"></p>
-        </div>
-        </div>
-        <div class="tab-panel" data-tab="about" hidden>
-        <div class="section-header console-section-title"><h3>配置说明</h3></div>
-        <div class="card console-note-card"><p>配置保存在核心数据目录（发布目录里的 data\）的 config.json，修改后立即生效，不需要重启核心。</p><details class="more"><summary>了解更多</summary><p>语音引擎设置、模型路径、角色和情绪参数都保存在核心数据目录（发布目录里的 <code>data\config.json</code>），修改后立即生效，不需要重启核心。保存采用临时文件加原子替换；配置损坏时控制台不会启动，也不会覆盖原文件。</p><p>控制台不需要令牌：只接受本机地址访问，并拒绝来自其他网页的跨站修改请求。</p><p><strong>保存规则：</strong>改输入框、勾选框、下拉框、滑块只是修改，要点页面底部的“保存”才生效（有未保存的修改时才会出现保存栏）；按钮则是立即执行的动作，比如切换引擎、启动或关闭服务、上传、删除、立即试发。</p></details></div>
-        </div>
-      </section>
-          <div class="save-bar" id="save-bar" role="region" aria-label="未保存的修改" hidden>
-        <div class="save-bar-text"><strong id="save-bar-count"></strong><span id="save-bar-error" class="save-bar-error" hidden></span></div>
-        <div class="save-bar-actions"><button class="btn btn-secondary" type="button" id="save-bar-discard">放弃修改</button><button class="btn btn-primary" type="button" id="save-bar-save">保存</button></div>
       </div>
-    </main>
+    </div>
   </div>
 
-  <div class="drawer-overlay" id="drawer-overlay" hidden></div>
+  <div class="dialog-overlay search-overlay" id="search-modal" hidden>
+    <div class="dialog search-dialog" role="dialog" aria-modal="true" aria-label="搜索设置">
+      <input id="search-input" class="input search-input" type="search" role="combobox" aria-expanded="true" aria-controls="search-results" aria-autocomplete="list" placeholder="搜索设置、页面、卡片……（中文、英文参数名都行）" autocomplete="off" spellcheck="false">
+      <ul id="search-results" class="search-results" role="listbox" aria-label="搜索结果"></ul>
+      <p class="console-note search-hint" id="search-note">↑↓ 选择 · 回车跳转 · Esc 关闭</p>
+    </div>
+  </div>
 
-  <div class="dialog-overlay" id="path-picker" hidden>
-    <div class="dialog dialog-lg" role="dialog" aria-modal="true" aria-labelledby="path-picker-title">
-      <div class="dialog-header"><h3 id="path-picker-title">选择路径</h3><button class="close-btn" type="button" id="path-picker-close" aria-label="关闭">✕</button></div>
+  <div class="dialog-overlay" id="testchat-modal" hidden>
+    <div class="dialog dialog-lg" role="dialog" aria-modal="true" aria-labelledby="testchat-title">
+      <div class="dialog-header"><h3 id="testchat-title">发一句测试对话</h3><button class="close-btn" type="button" id="testchat-close" aria-label="关闭">✕</button></div>
       <div class="dialog-body">
-        <div class="path-picker-bar"><button class="btn btn-secondary btn-sm" type="button" id="path-picker-up">↑ 上一级</button><select id="path-picker-drives" class="select"></select><input id="path-picker-current" class="input" placeholder="输入路径后按回车"></div>
-        <ul id="path-picker-list" class="path-picker-list" role="listbox" aria-label="目录内容"></ul>
-        <p id="path-picker-hint" class="console-note"></p>
+        <div class="testchat-row"><label class="console-inline-label">发到 <select id="testchat-kind" class="select"><option value="private">私聊（以主人身份）</option><option value="group">群聊（测试群友）</option></select></label></div>
+        <textarea id="testchat-text" class="input" rows="3" maxlength="2000" aria-label="要发的话">你好，今天过得怎么样？</textarea>
+        <p class="console-note" id="testchat-note"></p>
+        <div class="testchat-result" id="testchat-result" hidden>
+          <p class="console-note" id="testchat-status"></p>
+          <pre class="testchat-reply" id="testchat-reply"></pre>
+        </div>
       </div>
-      <div class="dialog-footer"><button class="btn btn-secondary" type="button" id="path-picker-cancel">取消</button><button class="btn btn-primary" type="button" id="path-picker-choose">选择</button></div>
+      <div class="dialog-footer"><button class="btn btn-secondary" type="button" id="testchat-cancel">关闭</button><button class="btn btn-primary" type="button" id="testchat-send">发送</button></div>
     </div>
   </div>
 

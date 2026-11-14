@@ -54,11 +54,14 @@ ORIGINAL_TEXTS = {
     "fail_texts": ["呜……这首没能唱好，换一首试试吧？"],
     "limit_text": "今天已经唱了{次数}首啦，嗓子要休息一下，明天再来吧～",
 }
+# Added later (101a-E): the line said after the owner was claimed with a code.
+LATER_TEXTS = {"owner_claimed": "认领成功，以后你就是主人啦。"}
 
 
 def pre_g1_config(**changes):
     """A config as written before G1 (affinity holds the names, song_request holds the texts)."""
     config = default_config()
+    config["characters"], config["default_character"] = {}, ""  # a pre-G1 config has no starter character
     config["affinity"] = {**stored_affinity_defaults(), "character": "藤田琴音", "display_name": "琴音"}
     config["song_request"].update(
         {"accept_texts": ORIGINAL_TEXTS["accept_texts"], "refuse_texts": ORIGINAL_TEXTS["refuse_texts"],
@@ -72,7 +75,8 @@ def pre_g1_config(**changes):
 class ReplyTextsTests(unittest.TestCase):
     def test_defaults_with_the_default_nickname_are_word_for_word_what_was_hard_coded(self):
         defaults = reply_texts.default_texts()
-        self.assertEqual(set(defaults), set(ORIGINAL_TEXTS))
+        self.assertEqual(set(defaults), set(ORIGINAL_TEXTS) | set(LATER_TEXTS))
+        self.assertEqual(defaults["owner_claimed"], LATER_TEXTS["owner_claimed"])
         for key, original in ORIGINAL_TEXTS.items():
             if isinstance(original, list):
                 self.assertEqual([reply_texts.fill_nickname(item, "琴音") for item in defaults[key]], original, key)
@@ -94,12 +98,12 @@ class ReplyTextsTests(unittest.TestCase):
 
     def test_meta_lists_every_text_with_its_placeholders(self):
         meta = reply_texts.text_meta()
-        self.assertEqual([item["key"] for item in meta], list(ORIGINAL_TEXTS))
+        self.assertEqual([item["key"] for item in meta], [*ORIGINAL_TEXTS, *LATER_TEXTS])
         by_key = {item["key"]: item for item in meta}
         self.assertEqual(by_key["accept_texts"]["placeholders"], ["{昵称}", "{歌名}"])
         self.assertEqual(by_key["limit_text"]["placeholders"], ["{昵称}", "{次数}"])
         self.assertEqual(by_key["queue_full"]["placeholders"], ["{昵称}"])
-        self.assertEqual({item["group"] for item in meta}, {"排队与出错", "点歌"})
+        self.assertEqual({item["group"] for item in meta}, {"排队与出错", "点歌", "认领主人"})
         self.assertEqual(by_key["fail_texts"]["kind"], "lines")
 
     def test_unknown_placeholders_are_rejected_and_named(self):
@@ -431,6 +435,7 @@ class ConsoleApiTests(unittest.IsolatedAsyncioTestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.store = ConfigStore(Path(self.directory.name))
+        self.store.config["characters"], self.store.config["default_character"] = {}, ""  # these tests start without the starter character
         self.port = _unused_loopback_port()
         self.service = ConsoleService(create_console_app(self.store, wake_prefix=lambda: ["/", "~"]), port=self.port)
         await self.service.start()
@@ -492,7 +497,7 @@ class ConsoleApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["texts"], reply_texts.default_texts())
         self.assertEqual(body["defaults"], reply_texts.default_texts())
         self.assertEqual(body["nickname"], "琴音")
-        self.assertEqual(len(body["meta"]), 16)
+        self.assertEqual(len(body["meta"]), 17)
         edited = {**body["texts"], "queue_full": "{昵称}在忙", "fail_texts": ["a", "b"]}
         status, saved = await self.call("/api/texts", "POST", edited)
         self.assertEqual(status, 200)

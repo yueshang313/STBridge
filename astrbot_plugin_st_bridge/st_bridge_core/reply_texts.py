@@ -34,6 +34,7 @@ GROUP_ERRORS = "排队与出错"
 # What "unavailable" said before H1: a config that still holds exactly this (nobody edited it) reads as the new default.
 OLD_UNAVAILABLE_DEFAULT = "桥接当前不可用，请检查服务状态与恢复保护。"
 GROUP_SONG = "点歌"
+GROUP_OWNER = "认领主人"
 
 # (key, kind, group, label, extra placeholders, default). kind: "text" is one line, "lines" is 1-10 lines (one is picked at random).
 TEXT_DEFS: tuple[tuple[str, str, str, str, tuple[str, ...], Any], ...] = (
@@ -53,6 +54,7 @@ TEXT_DEFS: tuple[tuple[str, str, str, str, tuple[str, ...], Any], ...] = (
     ("refuse_texts", "lines", GROUP_SONG, "不答应点歌时说的话（每行一句，随机选一句）", (), DEFAULT_REFUSE_TEXTS),
     ("fail_texts", "lines", GROUP_SONG, "没唱成时说的话（每行一句，随机选一句）", (SONG_NAME_PLACEHOLDER,), DEFAULT_FAIL_TEXTS),
     ("limit_text", "text", GROUP_SONG, "今天点满了", (LIMIT_PLACEHOLDER,), DEFAULT_LIMIT_TEXT),
+    ("owner_claimed", "text", GROUP_OWNER, "认领主人成功后回复的话", (), "认领成功，以后你就是主人啦。"),
 )
 TEXT_KEYS = tuple(item[0] for item in TEXT_DEFS)
 _PLACEHOLDER_RE = re.compile(r"\{([^{}]*)\}")

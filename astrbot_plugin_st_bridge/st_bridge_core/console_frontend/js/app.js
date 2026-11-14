@@ -4,8 +4,10 @@ import {
   installFold,
   todayCards,
   healthBanner,
+  recoveryBannerText,
   healthChain,
   healthHeadline,
+  healthLevel,
   healthTitle,
   dependencyStateText,
   importDoneText,
@@ -88,6 +90,9 @@ import {
   networkPayload,
   ownerPayload,
   ownerProblem,
+  ownerCurrentText,
+  ownerClaimReplaces,
+  ownerClaimView,
   connectorStatusText,
   chatPlatformPayload,
   chatPlatformProblems,
@@ -141,9 +146,32 @@ import {
   mergeCoverPatch,
   mergeSnapshot,
   pageFromHash,
+  resolveTarget,
+  onboardingSteps,
+  PAGE_LABELS,
+  searchEntries,
+  searchPathText,
+  normalizeSearchText,
+  filterLogLines,
+  highlightSegments,
+  logCountText,
+  installBackupsText,
+  onboardingView,
+  auditionProfile,
+  auditionErrorText,
+  testChatProblemText,
+  TESTCHAT_NOTE,
   runSaves,
   saveFailureText,
-  unsavedText
+  unsavedText,
+  saveBarText,
+  fieldKeyText,
+  readHelpOpen,
+  writeHelpOpen,
+  restoreValues,
+  useSegmented,
+  coreStatusView,
+  platformName
 } from "/static/js/logic.js";
 
 const state = {
@@ -438,7 +466,7 @@ function refreshDirtyUi() {
   const bar = $("save-bar");
   if (count === 0) saveError = saveError && saving ? saveError : "";
   bar.hidden = count === 0 && !saveError;
-  $("save-bar-count").textContent = count ? unsavedText(count) : "";
+  $("save-bar-count").textContent = count ? saveBarText(count) : "";
   $("save-bar-error").textContent = saveError;
   $("save-bar-error").hidden = !saveError;
   const dirtyTabSet = TABBED_PAGES.includes(page) ? dirtyTabs(tabItems) : new Set();
@@ -446,6 +474,7 @@ function refreshDirtyUi() {
     document.querySelectorAll(`#${tabbed} .tab`).forEach((button) => { button.querySelector(".tab-dot").hidden = tabbed !== page || !dirtyTabSet.has(button.dataset.tab); });
   }
   refreshPagers();
+  decorateRows(page);
 }
 
 function fieldLabel(element) {
@@ -511,7 +540,8 @@ async function reloadPage(page) {
   else if (page === "sing") await loadCover();
   else if (page === "affinity") await loadAffinity();
   else if (page === "injection") await loadInjection();
-  else if (page === "system") { await loadQueue(); await loadCleanup(); await loadTexts(); await loadNetwork(); await loadOwner(); await loadChatPlatform(); await loadLogs(); await loadPresets(); }
+  else if (page === "connect") { await loadChatPlatform(); await loadOwner(); await loadQueue(); }
+  else if (page === "system") { await loadCleanup(); await loadTexts(); await loadNetwork(); await loadLogs(); await loadPresets(); }
 }
 
 /** Save every dirty part of the page, in page order, stopping at the first failure. True when all were saved. */
@@ -587,7 +617,8 @@ async function confirmDiscardCard(part) {
 }
 
 async function requestPage(page, tab = "") {
-  const target = resolvePage(page);
+  ({ page, tab } = resolveTarget(page, tab));
+  const target = page;
   if (target === activePage()) {
     if (tab && TABBED_PAGES.includes(target)) selectTab(target, tab);
     return;
@@ -615,9 +646,13 @@ function bindUnsaved() {
     event.returnValue = "";
   });
   window.addEventListener("hashchange", () => {
-    const page = resolvePage(pageFromHash(location.hash));
-    if (page === activePage()) { if (TABBED_PAGES.includes(page)) selectTab(page, tabFromHash(location.hash)); }
-    else requestPage(page, tabFromHash(location.hash));
+    const { page, tab } = resolveTarget(pageFromHash(location.hash), tabFromHash(location.hash));
+    if (page === activePage()) { if (TABBED_PAGES.includes(page)) selectTab(page, tab); }
+    else requestPage(page, tab);
+  });
+  $("recovery-banner-dismiss").addEventListener("click", async () => {
+    try { await api("/api/recovery/dismiss", { method: "POST", body: "{}" }); } catch (error) { console.error(error); }
+    renderRecoveryBanner([]);
   });
   $("save-bar-save").addEventListener("click", () => { savePage(); });
   $("save-bar-discard").addEventListener("click", async () => {
@@ -1117,6 +1152,15 @@ async function loadFeatureFlags() {
   renderFeatures();
 }
 
+// ---------- 101e: an unusable config/affinity file was replaced ----------
+function renderRecoveryBanner(notices) {
+  const text = recoveryBannerText(notices);
+  const box = $("recovery-banner");
+  if (!box) return;
+  box.hidden = !text;
+  if (text) $("recovery-banner-text").textContent = text;
+}
+
 // ---------- H1: health chain (banner on every page, chain on the overview) ----------
 
 const BASE_TITLE = document.title;
@@ -1158,6 +1202,7 @@ function renderHealth() {
   });
   health.chain = chain;
   const name = currentNickname();
+  renderRecoveryBanner(health.status && health.status.data_recovery);
   const banner = healthBanner(chain, name);
   const box = $("health-banner");
   // The overview says the same in its own headline; the tab title still gets the sign.
@@ -1171,10 +1216,13 @@ function renderHealth() {
     link.href = hashFor(splitTarget(banner.goto).page, splitTarget(banner.goto).tab);
   }
   document.title = healthTitle(BASE_TITLE, chain);
-  const level = chain.some((node) => node.level === "error") ? "error" : chain.some((node) => node.level === "warn") ? "warn" : "ok";
+  const level = healthLevel(chain);
   $("ov-health").className = `card health-chain level-${level}`;
   $("ov-name").textContent = name;
   $("ov-avatar").textContent = avatarLetter(name);
+  $("side-name").textContent = name;
+  $("side-avatar").textContent = avatarLetter(name);
+  renderSideStatus();
   $("ov-health-headline").textContent = healthHeadline(chain, name);
   renderToday();
   $("ov-health-nodes").innerHTML = chain.map((node) => {
@@ -1196,16 +1244,368 @@ function renderToday() {
 
 /** Overview data: the status (chain + today's numbers), the voice and RVC services, the install state; switches only when `full`. */
 async function refreshOverview(full = false) {
-  const [, rvc, , install] = await Promise.allSettled([
+  const [, rvc, , install, ownerClaim, onboarding] = await Promise.allSettled([
     fetchStatus(),
     api("/api/cover/service"),
     refreshService(),
-    api("/api/install")
+    api("/api/install"),
+    api("/api/owner/claim"),
+    api("/api/onboarding")
   ]);
   renderOverviewInstall(install.status === "fulfilled" ? install.value : null);
+  if (onboarding.status === "fulfilled") state.onboarding = onboarding.value.onboarding;
+  state.checklist = {
+    install: install.status === "fulfilled" ? install.value : null,
+    owner: ownerClaim.status === "fulfilled" ? ownerClaim.value : null
+  };
+  renderOnboarding();
   health.rvc = rvc.status === "fulfilled" ? rvc.value : null;
   if (full || !state.features) await loadFeatureFlags();
   renderHealth();
+}
+
+// ---------- U5-2: settings search (Ctrl+K) ----------
+
+const SEARCH_KIND_TEXT = { page: "页面", tab: "标签", card: "卡片", setting: "设置", item: "条目" };
+let searchIndex = [];
+let searchShown = [];
+let searchActive = 0;
+
+const cleanText = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
+const inDrawerOrDialog = (element) => Boolean(element.closest(".drawer-card, .dialog-overlay, #search-modal"));
+
+/** The index of everything the console shows, built from the page itself each time the search opens (so it never goes stale). */
+function buildSearchIndex() {
+  const entries = [];
+  const keyHints = new Map();
+  for (const part of parts) {
+    let fields = {};
+    try { fields = part.collect(); } catch { fields = {}; }
+    for (const [key, element] of Object.entries(fields)) {
+      if (element) keyHints.set(element, `${key} ${part.id}`);
+    }
+  }
+  const pageTitle = (page) => PAGE_LABELS[page] || page;
+  for (const page of PAGE_IDS) {
+    entries.push({ kind: "page", label: pageTitle(page), keys: page, help: "", path: [pageTitle(page)], page, tab: "", element: null });
+    const section = $(page);
+    if (!section) continue;
+    section.querySelectorAll(":scope > .tabs .tab").forEach((button) => {
+      const label = cleanText(button.firstChild?.textContent || button.textContent);
+      entries.push({ kind: "tab", label, keys: `${page} ${button.dataset.tab}`, help: "", path: [pageTitle(page), label], page, tab: button.dataset.tab, element: null });
+    });
+    const where = (element) => {
+      const panel = element.closest(".tab-panel");
+      const tab = panel ? panel.dataset.tab : "";
+      return { tab, tabLabel: tab ? tabLabel(page, tab) : "" };
+    };
+    const cardTitle = (element) => {
+      const card = element.closest(".card");
+      return card ? cleanText((card.querySelector("h3") || {}).textContent) : "";
+    };
+    section.querySelectorAll(".card").forEach((card) => {
+      if (inDrawerOrDialog(card)) return;
+      const title = cleanText((card.querySelector("h3") || {}).textContent);
+      if (!title) return;
+      const { tab, tabLabel: tl } = where(card);
+      entries.push({ kind: "card", label: title, keys: "", help: "", path: [pageTitle(page), tl, title].filter(Boolean), page, tab, element: card });
+    });
+    section.querySelectorAll("details.module > summary").forEach((summary) => {
+      if (inDrawerOrDialog(summary)) return;
+      const label = cleanText(summary.textContent);
+      const { tab, tabLabel: tl } = where(summary);
+      entries.push({ kind: "card", label, keys: "", help: "", path: [pageTitle(page), tl, cardTitle(summary), label].filter(Boolean), page, tab, element: summary.parentElement });
+    });
+    section.querySelectorAll(".field").forEach((field) => {
+      if (inDrawerOrDialog(field)) return;
+      const labelElement = field.querySelector(".field-label");
+      const label = cleanText(labelElement ? labelElement.textContent : field.getAttribute("aria-label"));
+      if (!label) return;
+      const controls = [...field.querySelectorAll("input, select, textarea")];
+      const keys = controls.flatMap((control) => [control.name, control.id, keyHints.get(control)]).filter(Boolean).join(" ");
+      const help = cleanText(((field.querySelector(".field-help") || {}).textContent) || "");
+      const { tab, tabLabel: tl } = where(field);
+      entries.push({ kind: "setting", label, keys, help, path: [pageTitle(page), tl, cardTitle(field), label].filter(Boolean), page, tab, element: field });
+    });
+    // lists made while the console runs: emotions, plans, rows of the paged lists
+    const items = [
+      ...section.querySelectorAll("[data-emotion-card] > summary strong"),
+      ...section.querySelectorAll(".plan-card > header strong"),
+      ...section.querySelectorAll("[data-list-row] .row-main > strong, [data-list-row] > strong")
+    ];
+    for (const strong of items) {
+      if (inDrawerOrDialog(strong)) continue;
+      const label = cleanText(strong.textContent);
+      if (!label) continue;
+      const row = strong.closest("[data-emotion-card], .plan-card, [data-list-row]");
+      const { tab, tabLabel: tl } = where(strong);
+      entries.push({ kind: "item", label, keys: "", help: "", path: [pageTitle(page), tl, cardTitle(strong), label].filter(Boolean), page, tab, element: row });
+    }
+  }
+  return entries;
+}
+
+function renderSearchResults() {
+  const list = $("search-results");
+  const query = $("search-input").value;
+  searchShown = searchEntries(searchIndex, query);
+  searchActive = 0;
+  if (!normalizeSearchText(query)) {
+    list.innerHTML = "";
+    $("search-note").textContent = "↑↓ 选择 · 回车跳转 · Esc 关闭";
+    return;
+  }
+  if (!searchShown.length) {
+    list.innerHTML = '<li class="search-empty">没有找到匹配的设置。</li>';
+    $("search-note").textContent = "试试别的字，或者英文参数名。";
+    return;
+  }
+  list.innerHTML = searchShown.map((entry, index) => `<li class="search-result${index === 0 ? " active" : ""}" role="option" id="search-option-${index}" data-search-index="${index}" aria-selected="${index === 0}"><span><strong>${escapeHtml(entry.label)}</strong><span class="search-kind">${SEARCH_KIND_TEXT[entry.kind] || ""}</span></span><small>${escapeHtml(searchPathText(entry))}</small></li>`).join("");
+  $("search-note").textContent = `${searchShown.length} 条 · ↑↓ 选择 · 回车跳转 · Esc 关闭`;
+}
+
+function moveSearchSelection(step) {
+  if (!searchShown.length) return;
+  searchActive = (searchActive + step + searchShown.length) % searchShown.length;
+  $("search-results").querySelectorAll(".search-result").forEach((item, index) => {
+    item.classList.toggle("active", index === searchActive);
+    item.setAttribute("aria-selected", String(index === searchActive));
+    if (index === searchActive) item.scrollIntoView?.({ block: "nearest" });
+  });
+  $("search-input").setAttribute("aria-activedescendant", `search-option-${searchActive}`);
+}
+
+function openSearch() {
+  if (!$("app-dialog").hidden) return;
+  searchIndex = buildSearchIndex();
+  $("search-modal").hidden = false;
+  $("search-input").value = "";
+  renderSearchResults();
+  $("search-input").focus();
+}
+
+function closeSearch() {
+  $("search-modal").hidden = true;
+}
+
+/** Go to a result: the page and tab, every fold around it opened, scrolled to and lit for about two seconds. */
+async function jumpToSearchEntry(entry) {
+  closeSearch();
+  await requestPage(entry.page, entry.tab || "");
+  if (activePage() !== entry.page) return;
+  const element = entry.element;
+  if (!element || !element.isConnected) return;
+  revealElement(element);
+  element.scrollIntoView({ block: "center", behavior: "smooth" });
+  element.classList.add("search-highlight");
+  setTimeout(() => element.classList.remove("search-highlight"), 2000);
+}
+
+function bindSearch() {
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || "");
+  $("search-hint").textContent = isMac ? "⌘ K" : "Ctrl K";
+  $("search-open").addEventListener("click", openSearch);
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && String(event.key).toLowerCase() === "k") {
+      event.preventDefault();
+      if ($("search-modal").hidden) openSearch(); else closeSearch();
+    }
+  });
+  $("search-modal").addEventListener("click", (event) => { if (event.target === $("search-modal")) closeSearch(); });
+  $("search-input").addEventListener("input", renderSearchResults);
+  $("search-input").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") { event.preventDefault(); moveSearchSelection(1); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); moveSearchSelection(-1); }
+    else if (event.key === "Enter") { event.preventDefault(); const entry = searchShown[searchActive]; if (entry) jumpToSearchEntry(entry).catch(showError); }
+    else if (event.key === "Escape") { event.preventDefault(); closeSearch(); }
+  });
+  $("search-results").addEventListener("click", (event) => {
+    const item = event.target.closest("[data-search-index]");
+    const entry = item ? searchShown[Number(item.dataset.searchIndex)] : null;
+    if (entry) jumpToSearchEntry(entry).catch(showError);
+  });
+}
+
+// ---------- U5-1: the 开始使用 checklist ----------
+
+async function saveOnboarding(changes) {
+  const answer = await api("/api/onboarding", { method: "POST", body: JSON.stringify(changes) });
+  state.onboarding = answer.onboarding;
+  renderOnboarding();
+}
+
+function renderOnboarding() {
+  const flags = state.onboarding;
+  const card = $("ov-onboarding");
+  if (!flags) { card.hidden = true; $("onboarding-restore").hidden = true; return; }
+  const steps = onboardingSteps({
+    install: state.checklist?.install,
+    status: health.status,
+    owner: state.checklist?.owner,
+    voice: { settings: state.tts, service: state.service },
+    flags
+  });
+  const view = onboardingView(steps, flags, state.onboardingExpanded === true);
+  card.hidden = !view.visible;
+  $("onboarding-restore").hidden = view.visible;
+  $("onboarding-line").textContent = view.line;
+  const progress = $("onboarding-progress");
+  progress.setAttribute("aria-valuemax", String(view.total));
+  progress.setAttribute("aria-valuenow", String(view.done));
+  progress.dataset.done = String(view.total > 0 && view.done === view.total);
+  $("onboarding-progress-bar").style.width = view.total ? `${Math.round((view.done * 100) / view.total)}%` : "0%";
+  card.classList.toggle("collapsed", view.collapsed);
+  card.classList.toggle("needs-attention", view.collapsed && view.needs > 0);
+  $("onboarding-steps").hidden = view.collapsed;
+  $("onboarding-toggle").textContent = view.collapsed ? "展开" : "收起";
+  $("onboarding-toggle").hidden = !view.collapsed && !(flags.completed || view.needs === 0);
+  $("onboarding-steps").innerHTML = steps.map((step, index) => {
+    const mark = step.done ? '<span class="onboarding-mark done" aria-label="已完成">✓</span>' : `<span class="onboarding-mark" aria-label="未完成">${index + 1}</span>`;
+    const go = step.action === "test-chat"
+      ? '<button type="button" class="btn btn-secondary btn-sm" data-onboarding-action="test-chat">发一句测试</button>'
+      : `<button type="button" class="btn btn-secondary btn-sm" data-onboarding-go="${escapeHtml(step.id)}">去设置</button>`;
+    const skip = step.optional
+      ? (step.skipped
+        ? '<button type="button" class="btn btn-secondary btn-sm" data-onboarding-skip="0">撤销跳过</button>'
+        : step.done ? "" : '<button type="button" class="btn btn-secondary btn-sm" data-onboarding-skip="1">跳过</button>')
+      : "";
+    return `<li class="onboarding-step${step.done ? " done" : ""}" data-onboarding-step="${escapeHtml(step.id)}">${mark}<span class="onboarding-text"><strong>${escapeHtml(step.title)}${step.optional ? "（可选）" : ""}</strong><small>${escapeHtml(step.hint)}</small></span><span class="onboarding-actions">${go}${skip}</span></li>`;
+  }).join("");
+  state.onboardingSteps = steps;
+  if (view.markCompleted) saveOnboarding({ completed: true }).catch(console.error);
+}
+
+/** Open the page of a checklist step and flash the card the step is about. */
+async function goToOnboardingStep(step) {
+  const target = splitTarget(step.goto);
+  await requestPage(target.page, target.tab);
+  if (activePage() !== resolveTarget(target.page, target.tab).page) return;
+  const element = $(step.anchor);
+  const card = element?.closest(".card") || element;
+  if (!card) return;
+  revealElement(card);
+  card.scrollIntoView({ block: "center", behavior: "smooth" });
+  card.classList.add("onboarding-highlight");
+  setTimeout(() => card.classList.remove("onboarding-highlight"), 2600);
+}
+
+function bindOnboarding() {
+  $("onboarding-steps").addEventListener("click", (event) => {
+    const go = event.target.closest("[data-onboarding-go]");
+    if (go) { const step = state.onboardingSteps?.find((item) => item.id === go.dataset.onboardingGo); if (step) goToOnboardingStep(step).catch(showError); return; }
+    if (event.target.closest('[data-onboarding-action="test-chat"]')) { openTestChat(); return; }
+    const skip = event.target.closest("[data-onboarding-skip]");
+    if (skip) saveOnboarding({ voice_skipped: skip.dataset.onboardingSkip === "1" }).catch(showError);
+  });
+  $("onboarding-toggle").addEventListener("click", () => { state.onboardingExpanded = !state.onboardingExpanded; renderOnboarding(); });
+  $("onboarding-hide").addEventListener("click", () => { $("onboarding-hide").closest("details").open = false; saveOnboarding({ hidden: true }).catch(showError); });
+  $("onboarding-show").addEventListener("click", () => { state.onboardingExpanded = false; saveOnboarding({ hidden: false }).catch(showError); });
+}
+
+// ---------- U5-1: the test chat dialog and the 试听 buttons ----------
+
+function openTestChat() {
+  $("testchat-note").textContent = TESTCHAT_NOTE;
+  $("testchat-modal").hidden = false;
+  $("testchat-text").focus();
+}
+
+function closeTestChat() {
+  $("testchat-modal").hidden = true;
+}
+
+let testChatBusy = false;
+
+async function sendTestChat() {
+  if (testChatBusy) return;
+  const text = $("testchat-text").value.trim();
+  if (!text) { $("testchat-text").focus(); return; }
+  testChatBusy = true;
+  $("testchat-send").disabled = true;
+  $("testchat-send").textContent = "等 ST 回复中…";
+  $("testchat-result").hidden = false;
+  $("testchat-status").textContent = "已发出，ST 生成中（可能要几十秒）…";
+  $("testchat-reply").textContent = "";
+  let problem = "";
+  let failed = false;
+  try {
+    const result = await api("/api/test/chat", { method: "POST", body: JSON.stringify({ chat: $("testchat-kind").value, text }) });
+    problem = testChatProblemText(result, null);
+    failed = Boolean(problem);
+    $("testchat-reply").textContent = (result.replies || []).join("\n——\n");
+    $("testchat-status").textContent = problem ? problem : `成功，用了 ${(Number(result.elapsed_ms) / 1000).toFixed(1)} 秒`;
+    if (!problem) {
+      state.onboarding = { ...(state.onboarding || {}), tested: true };
+      renderOnboarding();
+    }
+  } catch (error) {
+    failed = true;
+    $("testchat-status").textContent = testChatProblemText(null, error);
+  } finally {
+    testChatBusy = false;
+    $("testchat-send").disabled = false;
+    $("testchat-send").textContent = "发送";
+  }
+  $("testchat-status").classList.toggle("console-note-error", failed);
+}
+
+let auditionAudio = null;
+let auditionBusy = false;
+
+/** Synthesize one sentence with the current engine and play it. `report(text, isError)` shows the outcome. */
+async function runAudition(button, body, report) {
+  if (auditionBusy) return;
+  auditionBusy = true;
+  const label = button.textContent;
+  button.disabled = true;
+  button.classList.add("busy");
+  button.textContent = "合成中…";
+  report("", false);
+  try {
+    const answer = await api("/api/tts/test", { method: "POST", body: JSON.stringify({ ...body, return_audio: true }) });
+    auditionAudio?.pause();
+    auditionAudio = new Audio(`data:${answer.content_type || "audio/wav"};base64,${answer.audio_base64}`);
+    try {
+      await auditionAudio.play();
+      report(`正在播放（${answer.duration_seconds ?? "?"} 秒，合成用了 ${(answer.elapsed_ms / 1000).toFixed(1)} 秒）`, false);
+    } catch {
+      report("合成好了，但浏览器没让自动播放：点一下页面再试一次", true);
+    }
+  } catch (error) {
+    report(auditionErrorText(error.status, error.payload), true);
+  } finally {
+    auditionBusy = false;
+    button.disabled = false;
+    button.classList.remove("busy");
+    button.textContent = label;
+  }
+}
+
+function bindAudition() {
+  $("voice-audition").addEventListener("click", (event) => {
+    const note = $("voice-audition-note");
+    runAudition(event.currentTarget, {}, (text, isError) => {
+      note.hidden = !text;
+      note.textContent = text;
+      note.classList.toggle("console-note-error", isError);
+    });
+  });
+  $("emotions-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-audition-emotion]");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const name = button.dataset.auditionEmotion;
+    const body = { character: state.selectedCharacter || undefined, emotion: name };
+    // What is typed in the emotion's form, saved or not, is what gets heard.
+    const form = [...$("emotions-list").querySelectorAll("[data-emotion-form]")].find((item) => item.dataset.emotionForm === name);
+    if (form) {
+      const raw = Object.fromEntries(new FormData(form).entries());
+      if (form.elements.split_sentence) raw.split_sentence = form.elements.split_sentence.checked;
+      body.emotion_profile = auditionProfile(currentEngine(), raw);
+    }
+    runAudition(button, body, (text, isError) => { if (text) notify(text, isError); });
+  });
 }
 
 let installProblem = null;
@@ -1245,8 +1645,7 @@ function startServicePolling() {
       if (healthTicks % 5 === 0) pollServices();
       if (healthTicks % 20 === 0) loadFeatureFlags().then(renderHealth).catch(console.error);
       if (page === "voice") refreshService();
-      else if (page === "system" && pageTab.system === "logs") loadLogs().catch(console.error);
-      else if (page === "system" && pageTab.system === "platform") refreshChatPlatformStatus().catch(console.error);
+      else if (page === "connect") refreshChatPlatformStatus().catch(console.error);
     }
   }, 3000);
   // Coming back to the tab: look right away instead of waiting for the next tick.
@@ -1348,7 +1747,7 @@ function emotionCard(name, engine, character, info, profile) {
       : `<p class="console-note">没有手动参数：合成时用这个情绪文件夹里的音频和服务设置里的默认参数。</p><div class="console-actions"><button type="button" class="btn btn-secondary btn-sm" data-create-override="${escaped}">创建手动参数</button></div>`;
     body = `<div class="emotion-audios"><div data-audio-list="${escaped}">${audios.length ? audios.map((audio) => audioRow(audio, character.model_name)).join("") : '<p class="placeholder">这个情绪还没有参考音频。</p>'}</div><div class="console-actions"><label class="btn btn-secondary btn-sm file-button">上传到“${escaped}”<input type="file" accept=".wav,.mp3,.ogg,.flac" data-upload-emotion="${escaped}"></label></div></div><details class="emotion-advanced" data-emotion-advanced="${escaped}" ${state.openAdvanced.has(name) ? "open" : ""}><summary>高级：手动参数</summary>${advanced}</details>`;
   }
-  return `<details class="emotion-editor emotion-card" data-emotion-card="${escaped}" ${state.openEmotions.has(name) ? "open" : ""}><summary><strong>${escaped}</strong>${badges} <small>${escapeHtml(status)}</small></summary>${body}</details>`;
+  return `<details class="emotion-editor emotion-card" data-emotion-card="${escaped}" ${state.openEmotions.has(name) ? "open" : ""}><summary><strong>${escaped}</strong>${badges} <small>${escapeHtml(status)}</small> <button type="button" class="btn btn-secondary btn-sm audition-btn" data-audition-emotion="${escaped}" title="用这一栏现在填的内容合成一句话并播放（没保存也可以）">试听</button></summary>${body}</details>`;
 }
 
 /** The emotion cards of the selected character (the part's fill; reference audio comes from state.discovered). */
@@ -1448,6 +1847,54 @@ async function loadNetwork() {
 async function loadOwner() {
   state.owner = await api("/api/owner");
   fillPart(P.owner);
+  await refreshOwnerClaim();
+}
+
+// The owner claim: the console shows a 6-digit code, the user sends it to the bot in a private chat.
+let ownerClaimTimer = null;
+
+function renderOwnerClaim(claim, { announce = false } = {}) {
+  state.ownerClaim = claim;
+  $("owner-current").textContent = ownerCurrentText(claim);
+  const view = ownerClaimView(claim);
+  $("owner-claim-box").hidden = !view.pending;
+  $("owner-claim-code").textContent = view.code;
+  const note = $("owner-claim-note");
+  // An old result ("已认领" from an hour ago) is not shown again when the page is opened later.
+  note.textContent = view.pending || announce ? view.text : "";
+  note.classList.toggle("console-note-error", view.tone === "error" && (view.pending || announce));
+  return view;
+}
+
+async function refreshOwnerClaim({ announce = false } = {}) {
+  const view = renderOwnerClaim(await api("/api/owner/claim"), { announce });
+  clearTimeout(ownerClaimTimer);
+  ownerClaimTimer = null;
+  if (view.poll) ownerClaimTimer = setTimeout(pollOwnerClaim, 1000);
+  return view;
+}
+
+async function pollOwnerClaim() {
+  ownerClaimTimer = null;
+  try {
+    const view = await refreshOwnerClaim({ announce: true });
+    if (!view.poll && state.ownerClaim?.state === "claimed") {
+      // The owner changed behind this page: show it in the fields too.
+      state.owner = await api("/api/owner");
+      fillPart(P.owner);
+      await loadChatPlatform();
+      notify("主人已认领，立即生效");
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function startOwnerClaim() {
+  if (ownerClaimReplaces(state.ownerClaim)
+    && !await confirmDialog("当前已有主人，认领后会替换。继续吗？", { confirmLabel: "继续认领" })) return;
+  await api("/api/owner/claim", { method: "POST" });
+  await refreshOwnerClaim({ announce: true });
 }
 
 async function loadChatPlatform() {
@@ -1502,14 +1949,44 @@ async function copyOnebotValue(id, button) {
   catch { await copyDialog(value); }
 }
 
+let logData = null;
+
 async function loadLogs() {
   const lines = Number($("logs-lines").value) || 300;
-  const data = await api(`/api/logs?lines=${lines}`);
+  logData = await api(`/api/logs?lines=${lines}`);
+  renderLogs();
+  $("logs-files").textContent = logData.files && logData.files.length > 1 ? `日志文件：${logData.files.join("、")}` : "";
+}
+
+const escapeLogText = (text) => escapeHtml(text);
+
+/** Draw the log lines that pass the keyword and level filters; stay at the bottom only if the reader was there. */
+function renderLogs() {
   const view = $("logs-view");
   const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 40;
-  view.textContent = logsText(data);
+  const all = logData && Array.isArray(logData.lines) ? logData.lines : [];
+  const keyword = $("logs-filter").value;
+  const shown = filterLogLines(all, { keyword, level: $("logs-level").value });
+  if (!all.length) view.textContent = logsText(logData);
+  else if (!shown.length) view.textContent = "没有符合筛选条件的行。";
+  else {
+    view.innerHTML = shown.map((line) => `<span class="log-line${line.level ? ` lvl-${line.level}` : ""}">${highlightSegments(line.text, keyword).map((part) => (part.match ? `<mark>${escapeLogText(part.text)}</mark>` : escapeLogText(part.text))).join("")}</span>`).join("\n");
+  }
+  $("logs-count").textContent = all.length ? logCountText(shown.length, all.length) : "";
   if (atBottom) view.scrollTop = view.scrollHeight;
-  $("logs-files").textContent = data.files && data.files.length > 1 ? `日志文件：${data.files.join("、")}` : "";
+}
+
+let logsTimer = null;
+
+/** Every 5 seconds while the switch is on, the logs tab is open and the browser tab is visible. */
+function syncLogsAutoRefresh() {
+  clearInterval(logsTimer);
+  logsTimer = null;
+  if (!$("logs-auto").checked) return;
+  logsTimer = setInterval(() => {
+    if (document.hidden || activePage() !== "system" || pageTab.system !== "logs") return;
+    loadLogs().catch(console.error);
+  }, 5000);
 }
 
 // ---------- Reply texts (系统 › 回复文案) ----------
@@ -1674,7 +2151,8 @@ function switchPage(page, tab = "") {
   if (page === "sing") loadCover().catch(showError);
   if (page === "affinity") loadAffinity().catch(showError);
   if (page === "injection") loadInjection().catch(showError);
-  if (page === "system") { loadQueue().catch(showError); loadCleanup().catch(showError); loadTexts().catch(showError); loadNetwork().catch(showError); loadOwner().catch(showError); loadChatPlatform().catch(showError); loadLogs().catch(showError); }
+  if (page === "connect") { loadChatPlatform().catch(showError); loadOwner().catch(showError); loadQueue().catch(showError); }
+  if (page === "system") { loadCleanup().catch(showError); loadTexts().catch(showError); loadNetwork().catch(showError); loadLogs().catch(showError); }
   loadPresets().catch(console.error);
 }
 
@@ -1683,7 +2161,7 @@ function switchPage(page, tab = "") {
 // Not a settings form: nothing here goes through the page save bar. Every button acts at once on what is
 // saved on the server; the sidebar shows which preset is current and whether the settings drifted from it.
 
-const PAGE_IDS = ["overview", "install", "voice", "emotions", "stickers", "schedule", "sing", "affinity", "injection", "system"];
+const PAGE_IDS = ["overview", "install", "connect", "voice", "emotions", "stickers", "schedule", "sing", "affinity", "injection", "system"];
 let presetTimer = null;
 let presetBusy = false;
 
@@ -1716,8 +2194,10 @@ function presetRow(item, { auto = false } = {}) {
 function renderPresets() {
   const listing = state.presets;
   $("preset-current").textContent = presetLabel(listing);
+  $("preset-modal-current").textContent = presetLabel(listing);
   const badge = presetBadge(listing);
-  setBadge("ov-preset-state", badge.text, badge.kind);
+  setBadge("preset-switcher-badge", badge.text, badge.kind);
+  $("preset-switcher-badge").hidden = !badge.text;
   const select = $("preset-select");
   const options = ['<option value="">切换预设…</option>'];
   for (const item of listing?.presets || []) if (!item.broken) options.push(`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`);
@@ -1771,12 +2251,7 @@ async function applyPreset(id) {
     await refreshAllPages();
     const text = applyResultText(result, item.name);
     showPresetResult(text, result.warnings?.length > 0);
-    // The system page's result box is out of sight when switching from the overview: say it in one line here too.
-    const summary = applyNotifyText(result, item.name);
-    const overviewResult = $("ov-preset-result");
-    overviewResult.textContent = summary;
-    overviewResult.hidden = false;
-    notify(summary, result.warnings?.length > 0);
+    notify(applyNotifyText(result, item.name), result.warnings?.length > 0);
   } catch (error) { showError(error); } finally { presetBusy = false; }
   loadPresets().catch(console.error);
 }
@@ -1846,7 +2321,25 @@ async function importPresetFile(file) {
   await loadPresets().catch(console.error);
 }
 
+function openPresetModal() {
+  $("preset-modal").hidden = false;
+  loadPresets().catch(console.error);
+  $("preset-modal-close").focus();
+}
+
+function closePresetModal() {
+  $("preset-modal").hidden = true;
+  $("preset-switcher").focus();
+}
+
 function bindPresets() {
+  $("preset-switcher").addEventListener("click", openPresetModal);
+  $("preset-modal-close").addEventListener("click", closePresetModal);
+  $("preset-modal").addEventListener("click", (event) => { if (event.target === $("preset-modal")) closePresetModal(); });
+  document.addEventListener("keydown", (event) => {
+    // The shared question dialog (z-index above) owns Esc while it is open.
+    if (event.key === "Escape" && !$("preset-modal").hidden && $("app-dialog").hidden) { event.preventDefault(); closePresetModal(); }
+  });
   $("preset-select").addEventListener("change", () => {
     const id = $("preset-select").value;
     $("preset-select").value = "";
@@ -2101,7 +2594,7 @@ async function loadStickers() {
   state.stickers = data;
   fillPart(P.stickerSettings);
   const list = $("sticker-list");
-  list.innerHTML = data.groups.length ? data.groups.map((group) => `<details class="emotion-editor audio-group" data-sticker-group="${escapeHtml(group.name)}" ${state.openStickerGroups.has(group.name) ? "open" : ""}><summary><strong>${escapeHtml(stickerGroupTitle(group))}</strong></summary>${group.images.length ? `<div class="sticker-grid">${group.images.map((image) => stickerItem(group.name, image)).join("")}</div>` : emptyStateMarkup("stickers", { upload: escapeHtml(group.name) })}<div class="console-actions"><label class="btn btn-secondary btn-sm file-button">上传到“${escapeHtml(group.name)}”（可多选）<input type="file" multiple accept="${STICKER_ACCEPT}" data-upload-sticker="${escapeHtml(group.name)}"></label></div></details>`).join("") : '<p class="placeholder">还没有可分组的情绪：请先在“角色与情绪”里为默认角色添加情绪。</p>';
+  list.innerHTML = data.groups.length ? data.groups.map((group) => `<details class="emotion-editor audio-group" data-sticker-group="${escapeHtml(group.name)}" ${state.openStickerGroups.has(group.name) ? "open" : ""}><summary><strong>${escapeHtml(stickerGroupTitle(group))}</strong></summary>${group.images.length ? `<div class="sticker-grid">${group.images.map((image) => stickerItem(group.name, image)).join("")}</div>` : emptyStateMarkup("stickers", { upload: escapeHtml(group.name) })}<div class="console-actions"><label class="btn btn-secondary btn-sm file-button">上传到“${escapeHtml(group.name)}”（可多选）<input type="file" multiple accept="${STICKER_ACCEPT}" data-upload-sticker="${escapeHtml(group.name)}"></label></div></details>`).join("") : emptyStateMarkup("stickerGroups");
   list.querySelectorAll(".sticker-grid").forEach((grid) => refreshGroupList(`sticker:${grid.closest("[data-sticker-group]").dataset.stickerGroup}`, grid, ".sticker-item", STICKER_PAGE_SIZE));
   list.querySelectorAll("[data-sticker-group]").forEach((details) => details.addEventListener("toggle", () => {
     if (details.open) state.openStickerGroups.add(details.dataset.stickerGroup); else state.openStickerGroups.delete(details.dataset.stickerGroup);
@@ -2332,6 +2825,19 @@ function renderCleanup() {
   fillPart(P.cleanupSettings);
   $("cleanup-last").textContent = `最近一次自动清理：${lastAutoText(last)}`;
   $("cleanup-cover-cache").textContent = `当前有 ${covers.entries} 条翻唱，占用 ${bytesText(covers.bytes)}`;
+  const backups = cleanupData.install_backups;
+  $("cleanup-install-backups").textContent = installBackupsText(backups);
+  $("cleanup-clear-backups").disabled = !backups || (backups.labels
+    && Object.values(backups.labels).every((label) => label.count <= 1));
+}
+
+async function clearInstallBackups() {
+  if (!(await confirmDialog("把插件和 ST 扩展的安装备份各只留最新一份？更旧的会被删除。预设备份等其他文件不受影响。", { danger: true, confirmLabel: "清理" }))) return;
+  try {
+    const result = await api("/api/cleanup/install-backups/clear", { method: "POST", body: "{}" });
+    notify(result.failed ? `已删除 ${result.removed} 份，${result.failed} 份删不掉（文件被占用，下次安装时会再试）` : `已删除 ${result.removed} 份旧备份，释放 ${bytesText(result.bytes)}`, result.failed > 0);
+    await loadCleanup();
+  } catch (error) { showError(error); }
 }
 
 async function loadCleanup() {
@@ -2778,7 +3284,7 @@ P.network = definePart({
 });
 
 P.owner = definePart({
-  id: "owner", page: "system", tab: "general", title: "主人",
+  id: "owner", page: "connect", title: "主人",
   collect: fieldsById({ platform_id: "owner-platform-id", sender_id: "owner-sender-id" }),
   fill() {
     const owner = state.owner?.owner;
@@ -2797,7 +3303,7 @@ P.owner = definePart({
 });
 
 P.chatPlatform = definePart({
-  id: "chat-platform", page: "system", tab: "platform", title: "聊天平台",
+  id: "chat-platform", page: "connect", title: "聊天平台",
   collect: fieldsById({ active: "chatplat-active", napcat_owner: "chatplat-owner", group_whitelist: "chatplat-groups" }),
   fill() {
     const settings = state.chatPlatform?.settings;
@@ -2846,16 +3352,17 @@ const afterTtsSave = async (notice, text) => {
 };
 
 P.queue = definePart({
-  id: "queue", page: "system", tab: "general", title: "消息排队",
-  collect: fieldsById({ max_waiting: "queue-max-waiting", max_wait_seconds: "queue-max-wait" }),
+  id: "queue", page: "connect", title: "消息排队",
+  collect: fieldsById({ max_waiting: "queue-max-waiting", max_wait_seconds: "queue-max-wait", reply_timeout_seconds: "queue-reply-timeout" }),
   fill() {
     const settings = state.queue?.settings;
     if (!settings) return;
     $("queue-max-waiting").value = settings.max_waiting;
     $("queue-max-wait").value = settings.max_wait_seconds;
+    $("queue-reply-timeout").value = settings.reply_timeout_seconds;
   },
   async save(values) {
-    await api("/api/queue/settings", { method: "POST", body: JSON.stringify({ max_waiting: Number(values.max_waiting), max_wait_seconds: Number(values.max_wait_seconds) }) });
+    await api("/api/queue/settings", { method: "POST", body: JSON.stringify({ max_waiting: Number(values.max_waiting), max_wait_seconds: Number(values.max_wait_seconds), reply_timeout_seconds: Number(values.reply_timeout_seconds) }) });
     return "消息排队设置已保存";
   }
 });
@@ -3636,6 +4143,7 @@ function bindInstall() {
   $("install-import-restart-button").addEventListener("click", restartCore);
   $("install-napcat-start").addEventListener("click", startNapcat);
   $("restart-core").addEventListener("click", restartCore);
+  $("owner-claim-start").addEventListener("click", () => startOwnerClaim().catch(showError));
   $("overview-restart-core").addEventListener("click", restartCore);
 }
 
@@ -3669,6 +4177,16 @@ function bind() {
   bindPlayer();
   bindDrawers();
   bindPresets();
+  bindOnboarding();
+  bindAudition();
+  $("overview-test-chat").addEventListener("click", openTestChat);
+  $("testchat-send").addEventListener("click", sendTestChat);
+  $("testchat-close").addEventListener("click", closeTestChat);
+  $("testchat-cancel").addEventListener("click", closeTestChat);
+  $("testchat-modal").addEventListener("click", (event) => { if (event.target === $("testchat-modal")) closeTestChat(); });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !$("testchat-modal").hidden && $("app-dialog").hidden) { event.preventDefault(); closeTestChat(); }
+  });
   $("cleanup-run").addEventListener("click", runCleanup);
   $("cleanup-clear-covers").addEventListener("click", clearCoverCache);
   $("cover-vocal-reverb").addEventListener("input", () => { $("cover-vocal-reverb-value").textContent = $("cover-vocal-reverb").value; });
@@ -3717,14 +4235,242 @@ function bind() {
   $("mood-reset-global").addEventListener("click", () => resetMood("global"));
   $("mood-reset-owner").addEventListener("click", () => resetMood("owner"));
   $("logs-lines").addEventListener("change", () => loadLogs().catch(showError));
+  $("logs-filter").addEventListener("input", renderLogs);
+  $("logs-level").addEventListener("change", renderLogs);
+  $("logs-auto").addEventListener("change", syncLogsAutoRefresh);
+  bindSearch();
+  $("cleanup-clear-backups").addEventListener("click", clearInstallBackups);
+}
+
+// ---------- U5-3: row-style settings (config keys, segmented choices), page help, restore defaults, sidebar status ----------
+
+const localStore = () => { try { return localStorage; } catch { return null; } };
+
+/** The grey config key next to each setting's name, from the same collect() map the search uses. */
+function decorateFieldKeys(page) {
+  for (const part of partsOf(page)) {
+    let elements = {};
+    try { elements = part.collect(); } catch { continue; }
+    for (const [key, element] of Object.entries(elements)) {
+      if (!element || inDrawerOrDialog(element)) continue;
+      const field = element.closest(".field");
+      const label = field && field.querySelector(".field-label");
+      if (!label || label.classList.contains("mono") || label.dataset.key !== undefined) continue;
+      const text = fieldKeyText(key, label.textContent);
+      if (text) label.dataset.key = text;
+    }
+  }
+}
+
+/** Up to three options: buttons side by side next to the (hidden) drop-down; rebuilt when the options change. */
+function decorateSegmented(page) {
+  const section = $(page);
+  if (!section) return;
+  section.querySelectorAll(".field > select").forEach((select) => {
+    if (inDrawerOrDialog(select)) return;
+    const options = [...select.options];
+    const signature = options.map((option) => `${option.value}\u0001${option.textContent}`).join("\u0002");
+    const totalChars = options.reduce((sum, option) => sum + option.textContent.length, 0);
+    let group = select.nextElementSibling && select.nextElementSibling.classList.contains("segmented") ? select.nextElementSibling : null;
+    if (group && group.dataset.signature !== signature) { group.remove(); group = null; select.removeAttribute("data-segmented-ready"); }
+    if (!group && useSegmented(options.length, totalChars)) {
+      group = document.createElement("div");
+      group.className = "segmented";
+      group.setAttribute("role", "radiogroup");
+      group.setAttribute("aria-label", cleanText(select.closest(".field")?.querySelector(".field-label")?.textContent));
+      group.dataset.signature = signature;
+      group.innerHTML = options.map((option) => `<button type="button" role="radio" data-value="${escapeHtml(option.value)}">${escapeHtml(option.textContent)}</button>`).join("");
+      select.insertAdjacentElement("afterend", group);
+      select.dataset.segmentedReady = "1";
+    }
+    if (group) group.querySelectorAll("button").forEach((button) => {
+      const on = button.dataset.value === select.value;
+      button.classList.toggle("active", on);
+      button.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  });
+}
+
+function bindSegmented() {
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".segmented > button");
+    if (!button) return;
+    const select = button.parentElement.previousElementSibling;
+    if (!select || select.tagName !== "SELECT" || select.value === button.dataset.value) return;
+    select.value = button.dataset.value;
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    decorateSegmented(activePage());
+  });
+}
+
+/** "还没有群" under the NapCat group whitelist while it is empty. */
+function refreshGroupsEmpty() {
+  const box = $("chatplat-groups-empty");
+  const input = $("chatplat-groups");
+  if (box && input) box.hidden = input.value.trim() !== "";
+}
+
+// -- the "?" next to a page title: opens the full explanation under the one-line lead; remembered per page --
+
+function setHelp(id, open, remember = true) {
+  const panel = $(`help-${id}`);
+  if (!panel) return;
+  panel.hidden = !open;
+  document.querySelectorAll(`[data-help="${id}"]`).forEach((button) => {
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    button.title = open ? "收起说明" : "展开说明";
+  });
+  if (remember) writeHelpOpen(localStore(), id, open);
+}
+
+function bindHelp() {
+  document.querySelectorAll(".help-panel").forEach((panel) => {
+    if (panel.querySelector(".help-close")) return;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "help-close";
+    close.setAttribute("aria-label", "关闭说明");
+    close.dataset.helpClose = panel.id.replace(/^help-/, "");
+    close.textContent = "×";
+    panel.appendChild(close);
+  });
+  document.querySelectorAll("[data-help]").forEach((button) => setHelp(button.dataset.help, readHelpOpen(localStore(), button.dataset.help), false));
+  document.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-help]");
+    if (toggle) { setHelp(toggle.dataset.help, $(`help-${toggle.dataset.help}`).hidden); return; }
+    const close = event.target.closest("[data-help-close]");
+    if (close) setHelp(close.dataset.helpClose, false);
+  });
+}
+
+// -- "恢复默认": a module's own fields back to the factory values (unsaved until 保存) --
+
+const viaState = (key, make) => ({ get: () => state[key], set: (value) => { state[key] = value; }, make });
+const DEFAULT_SOURCES = {
+  network: viaState("network", (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.network } })),
+  queue: viaState("queue", (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.queue } })),
+  mood: viaState("mood", (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.mood } })),
+  "tts-common": viaState("tts", (cur, cfg) => ({ ...cur, common: { ...(cur && cur.common), ...cfg.tts.common } })),
+  irodori: viaState("tts", (cur, cfg) => ({ ...cur, irodori: { ...(cur && cur.irodori), ...cfg.tts.irodori } })),
+  "gpt-service": viaState("tts", (cur, cfg) => ({ ...cur, gpt_sovits: { ...(cur && cur.gpt_sovits), ...cfg.tts.gpt_sovits } })),
+  "sticker-settings": viaState("stickers", (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.stickers } })),
+  "schedule-settings": viaState("schedule", (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.schedule.settings } })),
+  "cover-service": viaState("cover", (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.cover } })),
+  "cover-params": viaState("cover", (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.cover } })),
+  "cover-music": viaState("cover", (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.cover } })),
+  "song-request": viaState("cover", (cur, cfg) => ({ ...cur, song_request: { ...(cur && cur.song_request), ...cfg.song_request } })),
+  "cleanup-settings": { get: () => cleanupData, set: (value) => { cleanupData = value; }, make: (cur, cfg) => ({ ...cur, settings: { ...(cur && cur.settings), ...cfg.cleanup } }) }
+};
+// paths, folders and the music key belong to this computer, not to the factory: "恢复默认" leaves them alone
+const RESTORE_SKIP = /(_root|_dir|_path|_adapter)$|^(model|key|music_api_key)$/;
+let configDefaults = null;
+
+async function loadConfigDefaults() {
+  if (!configDefaults) configDefaults = await api("/api/config/defaults");
+  return configDefaults;
+}
+
+const restoreContainer = (element) => element.closest("details.module") || element.closest(".card");
+
+function decorateRestore(page) {
+  for (const part of partsOf(page)) {
+    if (!DEFAULT_SOURCES[part.id]) continue;
+    let elements = {};
+    try { elements = part.collect(); } catch { continue; }
+    for (const element of Object.values(elements)) {
+      if (!element || inDrawerOrDialog(element)) continue;
+      const container = restoreContainer(element);
+      if (!container || container.querySelector(":scope > .restore-defaults, :scope > summary > .restore-defaults, :scope > .card-header > .restore-defaults, :scope > .section-header > .restore-defaults")) continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "restore-defaults";
+      button.setAttribute("aria-label", "恢复默认");  // the words are drawn by CSS so a summary / title keeps its own text
+      button.title = "把这一块的设置改回出厂值（不会马上保存）";
+      const host = container.matches("details.module") ? container.querySelector(":scope > summary") : container.querySelector(":scope > .card-header, :scope > .section-header") || container;
+      host.appendChild(button);
+    }
+  }
+}
+
+async function restoreModule(button) {
+  const container = restoreContainer(button.parentElement);
+  if (!container) return;
+  let defaults;
+  try { defaults = await loadConfigDefaults(); } catch (error) { notify(`读取默认值失败：${error.message}`, true); return; }
+  let restored = 0;
+  for (const part of partsOf(activePage())) {
+    const source = DEFAULT_SOURCES[part.id];
+    if (!source) continue;
+    const elements = part.collect();
+    const keys = Object.keys(elements).filter((key) => elements[key] && container.contains(elements[key]) && !RESTORE_SKIP.test(key));
+    if (!keys.length || source.get() === undefined || source.get() === null) continue;
+    const current = readValues(part);
+    const saved = source.get();
+    let factory = null;
+    try {
+      source.set(source.make(saved, defaults));
+      part.fill();
+      factory = readValues(part);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      source.set(saved);
+      part.fill();
+      applyValues(part, current);
+    }
+    if (!factory) continue;
+    const picked = restoreValues(factory, keys);
+    applyValues(part, picked);
+    restored += Object.keys(picked).length;
+  }
+  refreshDirtyUi();
+  notify(restored ? "已改回默认值，点页面底部的“保存”才生效" : "这一块没有可以恢复的设置", !restored);
+}
+
+function bindRestore() {
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".restore-defaults");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    restoreModule(button).catch(console.error);
+  });
+}
+
+// -- the sidebar: character avatar and name on top, core state / version / chat platform at the bottom --
+
+function renderSideStatus() {
+  const view = coreStatusView(health.status, health.failures);
+  $("side-dot").className = `side-dot level-${view.level}`;
+  $("side-status-text").textContent = view.text;
+  const version = ((state.install || (state.checklist && state.checklist.install)) || {}).package?.version;
+  $("side-version").textContent = version ? `v${version}` : "";
+  const platform = platformName(health.status);
+  const box = $("side-platform");
+  box.hidden = !platform;
+  box.textContent = platform ? `聊天平台：${platform}` : "";
+}
+
+/** One pass over the page that is showing: keys, drop-down → buttons, restore buttons, empty hints. */
+function decorateRows(page) {
+  decorateFieldKeys(page);
+  decorateSegmented(page);
+  decorateRestore(page);
+  refreshGroupsEmpty();
 }
 
 async function init() {
   bind();
+  bindHelp();
+  bindSegmented();
+  bindRestore();
+  $("chatplat-groups").addEventListener("input", refreshGroupsEmpty);
   try { await loadTts(); } catch (error) { console.error(error); notify(`语音设置不可用：${error.message}`, true); }
   try { await loadAll(); } catch (error) { showError(error); }
   loadPresets().catch(console.error);
-  switchPage(resolvePage(pageFromHash(location.hash)), tabFromHash(location.hash));
+  const start = resolveTarget(pageFromHash(location.hash), tabFromHash(location.hash));
+  switchPage(start.page, start.tab);
   startServicePolling();
 }
 

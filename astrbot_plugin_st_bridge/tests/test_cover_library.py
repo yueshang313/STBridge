@@ -54,7 +54,7 @@ class CoverSettingsTests(unittest.TestCase):
         self.assertEqual(settings["model"], "")
         self.assertEqual(
             (settings["sep_model"], settings["dereverb_model"], settings["vocal_reverb"], settings["keep_stems"]),
-            ("vocals-bs-roformer-368", "dereverb-less-aggressive-18.8050", 0, False),
+            ("vocals-bs-roformer-368", "dereverb-less-aggressive-18.8050", 25, False),
         )
         self.assertNotIn("uvr_model", settings)
         self.assertNotIn("filter_radius", settings)

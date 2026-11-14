@@ -610,8 +610,8 @@ test("runSaves runs in order, stops at the first failure and reports what was do
 
 // ---- U2: pages, tabs, status, paging ----
 
-test("the sidebar always shows the same eight pages, in order, whatever the engine", () => {
-  assert.deepEqual(L.visiblePages(), ["overview", "voice", "emotions", "stickers", "schedule", "sing", "affinity", "injection", "install", "system"]);
+test("the sidebar always shows the same eleven pages, in order, whatever the engine", () => {
+  assert.deepEqual(L.visiblePages(), ["overview", "voice", "emotions", "stickers", "schedule", "sing", "affinity", "injection", "install", "connect", "system"]);
   assert.deepEqual(L.visiblePages("irodori"), L.visiblePages("gpt_sovits"));
   for (const page of L.visiblePages()) assert.equal(L.resolvePage(page), page);
   assert.equal(L.resolvePage("nope"), "overview");
@@ -822,16 +822,16 @@ test("preset names are checked like the server does", () => {
 });
 
 test("the sidebar label names the current preset and marks a modified one", () => {
-  assert.equal(L.presetLabel(null), "未保存为预设");
-  assert.equal(L.presetLabel({ current: null }), "未保存为预设");
+  assert.equal(L.presetLabel(null), "未选择");
+  assert.equal(L.presetLabel({ current: null }), "未选择");
   assert.equal(L.presetLabel({ current: "p1", current_name: "日常", modified: false }), "日常");
   assert.equal(L.presetLabel({ current: "p1", current_name: "日常", modified: true }), "日常（已修改）");
   assert.equal(L.presetLabel({ current: "p1", current_name: null, modified: null }), "（未命名）");
 });
 
 test("the overview badge shows saved, modified or not a preset", () => {
-  assert.deepEqual(L.presetBadge(null), { text: "未保存为预设", kind: "" });
-  assert.deepEqual(L.presetBadge({ current: null }), { text: "未保存为预设", kind: "" });
+  assert.deepEqual(L.presetBadge(null), { text: "", kind: "" });
+  assert.deepEqual(L.presetBadge({ current: null }), { text: "", kind: "" });
   assert.deepEqual(L.presetBadge({ current: "p1", modified: false }), { text: "已保存", kind: "status-success" });
   assert.deepEqual(L.presetBadge({ current: "p1", modified: true }), { text: "已修改", kind: "status-warning" });
 });
@@ -941,7 +941,7 @@ test("playback time is elapsed / total, or just elapsed while the length is unkn
 });
 
 test("the system page has five tabs; an unknown tab falls back to the first, other pages have none", () => {
-  assert.deepEqual(L.SYSTEM_TABS, ["general", "platform", "texts", "logs", "cleanup", "about"]);
+  assert.deepEqual(L.SYSTEM_TABS, ["general", "texts", "logs", "cleanup", "about"]);
   assert.equal(L.resolveTab("system", "cleanup"), "cleanup");
   assert.equal(L.resolveTab("system", "nope"), "general");
   assert.equal(L.resolveTab("system", ""), "general");
@@ -955,15 +955,21 @@ test("the system page has five tabs; an unknown tab falls back to the first, oth
 
 test("empty states say one sentence and name the main action when there is one", () => {
   const models = L.emptyStateMarkup("models");
-  assert.match(models, /^<div class="empty-state"><p>还没有模型。<\/p><button type="button" class="btn btn-primary btn-sm" data-empty-action="new-model">＋ 添加模型<\/button><\/div>$/);
+  assert.match(models, /^<div class="empty-state has-action"><p>还没有模型<\/p><button type="button" class="btn btn-primary btn-sm" data-empty-action="new-model">＋ 添加模型<\/button><\/div>$/);
   assert.match(L.emptyStateMarkup("characters"), /data-empty-action="new-character"/);
   assert.match(L.emptyStateMarkup("plans"), /data-empty-action="new-plan">新建计划</);
-  assert.match(L.emptyStateMarkup("songs"), /歌库是空的。.*data-empty-action="song-file">上传歌曲</);
-  assert.match(L.emptyStateMarkup("stickers", { upload: "happy" }), /这个情绪还没有表情包。.*data-empty-upload="happy">上传</);
-  for (const kind of ["users", "covers", "autos", "presets"]) {
+  assert.match(L.emptyStateMarkup("songs"), /还没有歌曲<\/p>.*data-empty-action="song-file">上传第一首</);
+  assert.match(L.emptyStateMarkup("stickers", { upload: "happy" }), /这个情绪还没有表情包<\/p>.*data-empty-upload="happy">上传</);
+  assert.match(L.emptyStateMarkup("plans"), /还没有定时计划<\/p>/);
+  // no button: one sentence only
+  for (const kind of ["autos", "presets"]) {
     assert.ok(!L.emptyStateMarkup(kind).includes("<button"), kind);
     assert.match(L.emptyStateMarkup(kind), /^<div class="empty-state"><p>.+<\/p><\/div>$/);
   }
+  // a link to the page that fixes it
+  assert.match(L.emptyStateMarkup("users"), /^<div class="empty-state has-action"><p>还没有用户.+<\/p><a class="btn btn-primary btn-sm" href="#connect" data-goto="connect">检查接入<\/a><\/div>$/);
+  assert.match(L.emptyStateMarkup("covers"), /还没有翻唱<\/p><a [^>]*href="#sing\/library" data-goto="sing\/library">去歌库</);
+  assert.match(L.emptyStateMarkup("stickerGroups"), /还没有可分组的情绪<\/p><a [^>]*href="#emotions" data-goto="emotions">/);
   assert.equal(L.emptyStateMarkup("unknown"), "");
 });
 
@@ -1037,7 +1043,7 @@ test("R3: NapCat status and overview lines", () => {
   assert.match(L.onebotFormatWarning({ format_warning: true }), /array/);
   assert.match(L.platformChoiceNote("napcat"), /当前是 NapCat/);
   assert.match(L.platformChoiceNote("astrbot"), /当前是 AstrBot/);
-  assert.equal(L.tabLabel("system", "platform"), "聊天平台");
+  assert.equal(L.tabLabel("system", "platform"), "");
 });
 
 test("R3: the wake prefix hint is satisfied by the NapCat prefixes (slash nickname and nickname)", () => {
@@ -1342,7 +1348,8 @@ test("H1 healthChain: six nodes in travel order, all fine", () => {
   const chain = chainOf({});
   assert.deepEqual(chain.map((node) => node.id), ["qq", "core", "st", "reply", "voice", "cover"]);
   assert.deepEqual(chain.map((node) => node.label), ["QQ 平台", "核心", "ST 扩展", "模型回复", "语音", "翻唱"]);
-  assert.deepEqual(chain.map((node) => node.level), ["ok", "ok", "ok", "ok", "ok", "ok"]);
+  // voice is running; singing waits for its first use: resting is yellow-ish "idle", not green.
+  assert.deepEqual(chain.map((node) => node.level), ["ok", "ok", "ok", "ok", "ok", "idle"]);
   for (const node of chain) assert.ok(node.goto && node.text, node.id);
   assert.equal(L.healthHeadline(chain, "琴音"), "琴音在线 · 一切正常");
   assert.equal(L.healthBanner(chain, "琴音"), null);
@@ -1402,13 +1409,22 @@ test("H1 healthChain: the voice node", () => {
   assert.equal(voice(goodVoice()).level, "ok");
   assert.equal(voice(goodVoice()).text, "Irodori 运行中");
   assert.equal(voice(goodVoice({ service: { engine: "gpt_sovits", state: "external" } })).text, "GPT-SoVITS 运行中");
-  assert.equal(voice(goodVoice({ service: { engine: "irodori", state: "starting" } })).level, "ok");
-  assert.equal(voice(goodVoice({ service: { engine: "irodori", state: "failed" } })).level, "warn");
-  const stopped = { engine: "irodori", state: "stopped" };
-  assert.equal(voice(goodVoice({ service: stopped })).level, "ok");
+  assert.equal(voice(goodVoice({ service: { engine: "irodori", state: "starting" } })).level, "idle");
+  assert.equal(voice(goodVoice({ service: { engine: "irodori", state: "failed" } })).level, "error");
+  const stopped = { engine: "irodori", state: "stopped", launch_dir: "D:/Irodori" };
+  assert.equal(voice(goodVoice({ service: stopped })).level, "idle");
   assert.equal(voice(goodVoice({ service: stopped })).text, "Irodori 用到时自动启动");
   const manual = goodVoice({ service: stopped, settings: { engine: "irodori", common: { prob: 100, auto_start: false } } });
-  assert.equal(voice(manual).level, "warn");
+  assert.equal(voice(manual).level, "idle");
+  assert.equal(voice(manual).text, "Irodori 没开，也不会自动启动");
+  // No folder to start from: the service cannot be used (red), by the folder or by the core's own message.
+  assert.equal(voice(goodVoice({ service: { engine: "irodori", state: "stopped", launch_dir: "  " } })).level, "error");
+  const unset = voice(goodVoice({ service: { engine: "irodori", state: "stopped", message: "未设置目录" } }));
+  assert.equal(unset.level, "error");
+  assert.equal(unset.reason, "Irodori 语音服务不可用：还没设置目录");
+  // A service that is up does not care about the folder text.
+  assert.equal(voice(goodVoice({ service: { engine: "irodori", state: "external", launch_dir: "" } })).level, "ok");
+  assert.equal(voice(goodVoice({ service: { engine: "irodori", state: "running", launch_dir: "" } })).level, "ok");
   const off = goodVoice({ settings: { engine: "irodori", common: { prob: 0, auto_start: true } }, service: { engine: "irodori", state: "failed" } });
   assert.equal(voice(off).level, "off");
   assert.equal(voice(goodVoice({ service: null })).level, "off");
@@ -1421,18 +1437,32 @@ test("H1 healthChain: the cover node", () => {
   assert.equal(cover(goodCover({ enabled: false, service: { state: "failed" } })).level, "off");
   assert.equal(cover(goodCover({ enabled: undefined })).level, "off");
   assert.equal(cover(null).level, "off");
-  assert.equal(cover(goodCover()).level, "ok");
+  assert.equal(cover(goodCover()).level, "idle");
   assert.match(cover(goodCover()).text, /待命/);
   assert.equal(cover(goodCover({ service: { state: "running" } })).text, "RVC 运行中");
-  assert.equal(cover(goodCover({ service: { state: "failed" } })).level, "warn");
-  assert.equal(cover(goodCover({ service: null })).level, "ok");
+  assert.equal(cover(goodCover({ service: { state: "running" } })).level, "ok");
+  assert.equal(cover(goodCover({ service: { state: "external" } })).level, "ok");
+  assert.equal(cover(goodCover({ service: { state: "starting" } })).level, "idle");
+  assert.equal(cover(goodCover({ service: { state: "failed" } })).level, "error");
+  assert.equal(cover(goodCover({ service: null })).level, "idle");
+  const unset = cover(goodCover({ service: { state: "stopped", message: "未设置 RVC 目录" } }));
+  assert.equal(unset.level, "error");
+  assert.equal(unset.reason, "翻唱不可用：还没设置 RVC 目录");
+  assert.equal(cover(goodCover({ service: { state: "stopped", launch_dir: "D:/RVC" } })).level, "idle");
 });
 
 test("H1 healthHeadline: the first error wins, warnings are counted, the name is not fixed", () => {
   const broken = chainOf({ status: goodStatus({ connector: { connected: false }, bridge: { http_running: true, last_poll_age: 300 } }) });
   assert.equal(L.healthHeadline(broken, "小铃"), "小铃现在回不了消息：AstrBot 插件没连上");
+  // A voice / singing problem never says the replies are gone: text chat still works.
   const warned = chainOf({ voice: goodVoice({ service: { engine: "irodori", state: "failed" } }), cover: goodCover({ service: { state: "failed" } }) });
   assert.equal(L.healthHeadline(warned, "小铃"), "小铃在线 · 有 2 项需要注意");
+  // Resting services (idle) are not problems.
+  const resting = chainOf({ voice: goodVoice({ service: { engine: "irodori", state: "stopped", launch_dir: "D:/I" } }), cover: goodCover({ service: { state: "starting" } }) });
+  assert.equal(L.healthHeadline(resting, "小铃"), "小铃在线 · 一切正常");
+  // A blocking error still comes first, even with a voice error before it in the list of problems.
+  const both = chainOf({ status: goodStatus({ connector: { connected: false } }), voice: goodVoice({ service: { engine: "irodori", state: "failed" } }) });
+  assert.equal(L.healthHeadline(both, "小铃"), "小铃现在回不了消息：AstrBot 插件没连上");
   assert.equal(L.healthHeadline(chainOf({}), "小铃"), "小铃在线 · 一切正常");
   assert.equal(L.healthHeadline(chainOf({})), `${L.DEFAULT_NICKNAME}在线 · 一切正常`);
   assert.equal(L.healthHeadline(null, "x"), "x在线 · 一切正常");
@@ -1449,14 +1479,32 @@ test("H1 healthBanner and healthTitle", () => {
   assert.match(banner.text, /^琴音现在回不了消息：ST 扩展离线/);
   assert.equal(L.healthTitle("ST Bridge 控制台", broken), "⚠ ST Bridge 控制台");
   const warned = chainOf({ voice: goodVoice({ service: { engine: "irodori", state: "failed" } }) });
-  const yellow = L.healthBanner(warned, "琴音");
-  assert.equal(yellow.level, "warn");
-  assert.equal(yellow.goto, "voice");
+  const voiceError = L.healthBanner(warned, "琴音");
+  assert.equal(voiceError.level, "error");
+  assert.equal(voiceError.goto, "voice");
+  assert.equal(voiceError.text, "琴音在线 · 有 1 项需要注意");
+  assert.doesNotMatch(voiceError.text, /回不了消息/);
+  // The tab sign only looks at qq / core / st / reply.
   assert.equal(L.healthTitle("ST Bridge 控制台", warned), "ST Bridge 控制台");
+  assert.equal(L.healthTitle("T", chainOf({ cover: goodCover({ service: { state: "failed" } }) })), "T");
+  // A resting service never raises a banner.
+  const resting = chainOf({ voice: goodVoice({ service: { engine: "irodori", state: "stopped", launch_dir: "D:/I" } }) });
+  assert.equal(L.healthBanner(resting, "琴音"), null);
+  assert.equal(L.healthBanner(chainOf({ voice: goodVoice({ service: { engine: "irodori", state: "starting" } }) }), "琴音"), null);
   // An error beats an earlier-in-the-chain warning for the link target.
   const both = chainOf({ status: goodStatus({ replies: replies(["StFailed", "StFailed", "StFailed"]) }), voice: goodVoice({ service: { engine: "irodori", state: "failed" } }) });
   assert.equal(L.healthBanner(both, "琴音").level, "error");
   assert.equal(L.healthBanner(both, "琴音").goto, "system/logs");
+});
+
+test("101c healthLevel: blocking error red, other problems yellow, resting and off nothing", () => {
+  assert.equal(L.healthLevel(chainOf({})), "ok");
+  assert.equal(L.healthLevel(null), "ok");
+  assert.equal(L.healthLevel(chainOf({ status: goodStatus({ connector: { connected: false } }) })), "error");
+  assert.equal(L.healthLevel(chainOf({ voice: goodVoice({ service: { engine: "irodori", state: "failed" } }) })), "warn");
+  assert.equal(L.healthLevel(chainOf({ cover: goodCover({ service: { state: "failed" } }) })), "warn");
+  assert.equal(L.healthLevel(chainOf({ cover: goodCover({ enabled: false }), voice: goodVoice({ settings: { common: { prob: 0 } } }) })), "ok");
+  assert.deepEqual(L.BLOCKING_NODES, ["qq", "core", "st", "reply"]);
 });
 
 test("H1 every goto is a page or tab the console has", () => {
@@ -1649,4 +1697,410 @@ test("H2 the page is called 角色和情绪 but keeps its id", () => {
   assert.equal(L.resolvePage("emotions"), "emotions");
   assert.equal(L.resolvePage("characters"), "emotions");
   assert.equal(L.resolvePage("audios"), "emotions");
+});
+
+test("owner claim: current owner text, replace confirmation and the claim box states", () => {
+  assert.equal(L.ownerCurrentText(null), "还没有主人");
+  assert.equal(L.ownerCurrentText({ current: null }), "还没有主人");
+  assert.equal(L.ownerCurrentText({ active_platform: "astrbot", current: { platform_id: "default_1234567890", masked_id: "op******er" } }), "default_1234567890 · op******er");
+  assert.equal(L.ownerCurrentText({ active_platform: "napcat", current: { platform_id: "napcat", masked_id: "20******01" } }), "NapCat · 20******01");
+  assert.equal(L.ownerClaimReplaces({ current: { masked_id: "a*b" } }), true);
+  assert.equal(L.ownerClaimReplaces({ current: null }), false);
+  assert.equal(L.ownerClaimReplaces(undefined), false);
+
+  const pending = L.ownerClaimView({ state: "pending", code: "012345", expires_in: 65 });
+  assert.deepEqual([pending.pending, pending.code, pending.clock, pending.poll], [true, "012345", "1:05", true]);
+  assert.match(pending.text, /6 位数字.*1:05/);
+  assert.equal(L.ownerClaimView({ state: "pending", code: "1", expires_in: 0 }).clock, "0:00");
+  const claimed = L.ownerClaimView({ state: "claimed" });
+  assert.deepEqual([claimed.pending, claimed.poll, claimed.tone, claimed.code], [false, false, "ok", ""]);
+  assert.match(claimed.text, /已认领/);
+  assert.match(L.ownerClaimView({ state: "expired" }).text, /已过期/);
+  assert.equal(L.ownerClaimView({ state: "expired" }).tone, "error");
+  assert.match(L.ownerClaimView({ state: "failed" }).text, /失败/);
+  assert.deepEqual([L.ownerClaimView({ state: "idle" }).text, L.ownerClaimView(null).pending], ["", false]);
+});
+
+// ---------- 101e: voice light during the post-failure pause ----------
+test("101e voice light: a pause after a failed start is red and says when to retry; running or starting is not red", () => {
+  const stopped = (extra) => goodVoice({ service: { engine: "irodori", state: "stopped", launch_dir: "D:/x", ...extra } });
+  const node = byId(chainOf({ voice: stopped({ cooldown_seconds: 200 }) }), "voice");
+  assert.equal(node.level, "error");
+  assert.match(node.text, /启动失败，4 分钟后重试/);
+  assert.equal(byId(chainOf({ voice: stopped({ cooldown_seconds: 20 }) }), "voice").text.includes("1 分钟后重试"), true);
+  assert.equal(byId(chainOf({ voice: stopped({ cooldown_seconds: 0 }) }), "voice").level, "idle");
+  const running = byId(chainOf({ voice: goodVoice({ service: { engine: "irodori", state: "running", cooldown_seconds: 90 } }) }), "voice");
+  assert.equal(running.level, "ok");
+});
+
+// ---------- 101e: red bar for replaced data files ----------
+test("101e recoveryBannerText: nothing without notices; names the file, what was used and where the broken one went", () => {
+  assert.equal(L.recoveryBannerText([]), null);
+  assert.equal(L.recoveryBannerText(undefined), null);
+  const backup = L.recoveryBannerText([{ file: "config.json", used: "backup", broken: ["config.json.broken-20261112-101500"] }]);
+  assert.match(backup, /config\.json 损坏，已改用上次的备份；坏文件已改名保存为 config\.json\.broken-20261112-101500/);
+  const both = L.recoveryBannerText([
+    { file: "config.json", used: "default", broken: ["a.broken-1", "b.broken-1"] },
+    { file: "affinity.json", used: "empty", broken: ["affinity.json.broken-2"] }
+  ]);
+  assert.match(both, /已改用默认设置；坏文件已改名保存为 a\.broken-1、b\.broken-1/);
+  assert.match(both, /好感度已从空白开始/);
+});
+
+// ---------- U5-1: navigation groups and moved places ----------
+test("U5-1 the sidebar: four titled groups, every page exactly once, the overview on top", () => {
+  assert.deepEqual(L.NAV_GROUPS.map((group) => group.title), ["角色", "功能", "接入", "系统"]);
+  assert.deepEqual(L.NAV_GROUPS.map((group) => group.pages), [
+    ["emotions", "affinity", "stickers"], ["voice", "sing", "schedule"], ["connect", "install", "injection"], ["system"]
+  ]);
+  const listed = ["overview", ...L.NAV_GROUPS.flatMap((group) => group.pages)];
+  assert.deepEqual([...listed].sort(), [...L.visiblePages()].sort());
+  assert.equal(new Set(listed).size, listed.length);
+  assert.equal(L.PAGE_LABELS.connect, "接入");
+});
+
+test("U5-1 old links: the removed 聊天平台 tab opens the 接入 page; old page names and unknown tabs still resolve", () => {
+  assert.deepEqual(L.resolveTarget("system", "platform"), { page: "connect", tab: "" });
+  assert.deepEqual(L.resolveTarget("connect", ""), { page: "connect", tab: "" });
+  assert.deepEqual(L.resolveTarget("system", "logs"), { page: "system", tab: "logs" });
+  assert.deepEqual(L.resolveTarget("sing", "chat"), { page: "sing", tab: "chat" });
+  assert.deepEqual(L.resolveTarget("cleanup", ""), { page: "system", tab: "" });
+  assert.deepEqual(L.resolveTarget("dashboard", ""), { page: "overview", tab: "" });
+  assert.deepEqual(L.resolveTarget("nope", "x"), { page: "overview", tab: "" });
+  // system/general is still a real tab (ports): the old queue / owner entries land on it, and the cards are found on 接入
+  assert.deepEqual(L.resolveTarget("system", "general"), { page: "system", tab: "general" });
+});
+
+test("U5-1 links that pointed to moved cards now point to the 接入 page", () => {
+  const chain = L.healthChain({ status: null, failures: 3, voice: null, cover: null });
+  assert.equal(chain.find((node) => node.id === "qq").goto, "connect");
+  const cards = L.todayCards({ queue: { waiting: 1, active: true } });
+  assert.equal(cards.find((card) => card.id === "queue").goto, "connect");
+  assert.equal(L.FEATURE_LINKS.find((link) => link.key === "cleanup").target, "system/cleanup");
+  // nothing the console links to is a place that no longer exists
+  for (const node of chain) assert.ok(L.visiblePages().includes(L.resolveTarget(...Object.values(L.splitTarget(node.goto))).page), node.goto);
+  for (const link of L.FEATURE_LINKS) assert.ok(L.visiblePages().includes(L.resolveTarget(link.target.split("/")[0], link.target.split("/")[1] || "").page), link.target);
+});
+
+// ---------- U5-1: the 开始使用 checklist ----------
+const okInstall = (extra = {}) => ({
+  checks: { st: { state: "valid" }, astrbot: { state: "valid" } },
+  extension: { state: "installed" }, plugin: { state: "installed" }, ...extra
+});
+const goodInput = (extra = {}) => ({
+  install: okInstall(),
+  status: { platform: "astrbot", connector: { connected: true }, onebot: null },
+  owner: { current: { platform_id: "p", masked_id: "x" } },
+  voice: { settings: { engine: "irodori" }, service: { state: "stopped", launch_dir: "D:/i" } },
+  flags: { tested: true, voice_skipped: false, hidden: false, completed: false },
+  ...extra
+});
+const stepOf = (steps, id) => steps.find((step) => step.id === id);
+
+test("U5-1 checklist: six steps in order, all done on a good setup", () => {
+  const steps = L.onboardingSteps(goodInput());
+  assert.deepEqual(steps.map((step) => step.id), ["paths", "install", "platform", "owner", "voice", "test"]);
+  assert.deepEqual(steps.map((step) => step.done), [true, true, true, true, true, true]);
+  for (const step of steps) assert.ok(step.title && step.hint, step.id);
+  assert.equal(stepOf(steps, "voice").optional, true);
+  assert.equal(stepOf(steps, "test").action, "test-chat");
+  for (const step of steps.filter((item) => item.goto)) assert.ok(L.visiblePages().includes(step.goto), step.goto);
+});
+
+test("U5-1 checklist: nothing known means nothing done (no crash on missing data)", () => {
+  const steps = L.onboardingSteps({});
+  assert.deepEqual(steps.map((step) => step.done), [false, false, false, false, false, false]);
+  assert.doesNotThrow(() => L.onboardingSteps(undefined));
+});
+
+test("U5-1 checklist: paths - ST always, AstrBot only when that is the platform", () => {
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ install: okInstall({ checks: { st: { state: "valid" }, astrbot: { state: "empty" } } }) })), "paths").done, false);
+  const napcat = goodInput({ install: okInstall({ checks: { st: { state: "valid" }, astrbot: { state: "empty" } } }), status: { platform: "napcat", onebot: { connected: true } } });
+  assert.equal(stepOf(L.onboardingSteps(napcat), "paths").done, true);
+  const noSt = goodInput({ install: okInstall({ checks: { st: { state: "empty" }, astrbot: { state: "valid" } } }) });
+  const paths = stepOf(L.onboardingSteps(noSt), "paths");
+  assert.equal(paths.done, false);
+  assert.match(paths.hint, /SillyTavern/);
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ install: okInstall({ checks: { st: { state: "invalid" } } }) })), "paths").done, false);
+});
+
+test("U5-1 checklist: extension and plugin - NapCat needs no plugin", () => {
+  const noPlugin = L.onboardingSteps(goodInput({ install: okInstall({ plugin: { state: "missing" } }) }));
+  assert.equal(stepOf(noPlugin, "install").done, false);
+  assert.match(stepOf(noPlugin, "install").hint, /AstrBot 插件/);
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ install: okInstall({ extension: { state: "missing" } }) })), "install").done, false);
+  const napcat = goodInput({ install: okInstall({ plugin: { state: "missing" } }), status: { platform: "napcat", onebot: { connected: true } } });
+  assert.equal(stepOf(L.onboardingSteps(napcat), "install").done, true);
+});
+
+test("U5-1 checklist: platform connected - AstrBot connector or NapCat OneBot, whichever is chosen", () => {
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ status: { platform: "astrbot", connector: { connected: false } } })), "platform").done, false);
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ status: { platform: "astrbot", connector: { connected: true }, onebot: { connected: false } } })), "platform").done, true);
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ status: { platform: "napcat", connector: { connected: true }, onebot: { connected: false } } })), "platform").done, false);
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ status: { platform: "napcat", onebot: { connected: true } } })), "platform").done, true);
+});
+
+test("U5-1 checklist: owner", () => {
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ owner: { current: null } })), "owner").done, false);
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ owner: null })), "owner").done, false);
+});
+
+test("U5-1 checklist: voice is optional - set up and not failed, or skipped", () => {
+  const voice = (service, settings = { engine: "irodori" }) => goodInput({ voice: { settings, service } });
+  assert.equal(stepOf(L.onboardingSteps(voice({ state: "stopped", launch_dir: "D:/i" })), "voice").done, true);
+  assert.equal(stepOf(L.onboardingSteps(voice({ state: "running", launch_dir: "D:/i" })), "voice").done, true);
+  assert.equal(stepOf(L.onboardingSteps(voice({ state: "failed", launch_dir: "D:/i" })), "voice").done, false);
+  assert.equal(stepOf(L.onboardingSteps(voice({ state: "stopped", launch_dir: "" })), "voice").done, false);
+  assert.equal(stepOf(L.onboardingSteps(voice({ state: "stopped", message: "未设置目录" })), "voice").done, false);
+  assert.equal(stepOf(L.onboardingSteps(voice(undefined)), "voice").done, false);
+  const skipped = L.onboardingSteps(goodInput({ voice: { settings: { engine: "irodori" }, service: { state: "failed" } }, flags: { voice_skipped: true } }));
+  assert.equal(stepOf(skipped, "voice").done, true);
+  assert.equal(stepOf(skipped, "voice").skipped, true);
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ flags: { voice_skipped: true } })), "voice").skipped, true);
+});
+
+test("U5-1 checklist: the test step follows the saved flag", () => {
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ flags: { tested: false } })), "test").done, false);
+  assert.equal(stepOf(L.onboardingSteps(goodInput({ flags: { tested: true } })), "test").done, true);
+});
+
+test("U5-1 checklist view: full list at first, one line once completed, never a big card again afterwards", () => {
+  const some = L.onboardingSteps(goodInput({ owner: { current: null }, flags: { tested: false } }));
+  let view = L.onboardingView(some, { completed: false });
+  assert.deepEqual([view.visible, view.collapsed, view.done, view.total, view.needs, view.markCompleted], [true, false, 4, 6, 2, false]);
+  assert.match(view.line, /已完成 4 \/ 6/);
+
+  const all = L.onboardingSteps(goodInput());
+  view = L.onboardingView(all, { completed: false });
+  assert.deepEqual([view.collapsed, view.markCompleted], [true, true]);
+  assert.equal(view.line, "✓ 已全部完成");
+  view = L.onboardingView(all, { completed: true });
+  assert.deepEqual([view.collapsed, view.markCompleted], [true, false]);
+  assert.equal(L.onboardingView(all, { completed: true }, true).collapsed, false);
+
+  // a step comes undone later: still one line, only the count says so
+  view = L.onboardingView(L.onboardingSteps(goodInput({ install: okInstall({ extension: { state: "missing" } }) })), { completed: true, tested: true });
+  assert.deepEqual([view.collapsed, view.needs, view.markCompleted], [true, 1, false]);
+  assert.equal(view.line, "有 1 步需要处理");
+
+  assert.equal(L.onboardingView(all, { hidden: true }).visible, false);
+  assert.equal(L.onboardingView([], {}).markCompleted, false);
+});
+
+// ---------- U5-1: audition and the test chat ----------
+test("U5-1 audition: the unsaved form values go along, only the engine's own fields", () => {
+  assert.deepEqual(L.auditionProfile("irodori", { caption: "元気に", emoji: "😊", ref_audio_path: "x", nonsense: 1 }), { caption: "元気に", emoji: "😊" });
+  assert.deepEqual(L.auditionProfile("gpt_sovits", { ref_audio_path: "D:/a.wav", top_k: "20", top_p: "0.8", split_sentence: true, caption: "no" }),
+    { ref_audio_path: "D:/a.wav", top_k: 20, top_p: 0.8, split_sentence: true });
+  assert.deepEqual(L.auditionProfile("irodori", {}), {});
+  assert.deepEqual(L.auditionProfile("irodori", null), {});
+});
+
+test("U5-1 audition: error lines say what happened, and the cooldown says how long", () => {
+  assert.equal(L.auditionErrorText(502, { error: "ServiceStartError", message: "x", cooldown_seconds: 200 }), "语音服务冷却中，200 秒后再试，或先在语音页手动启动");
+  assert.match(L.auditionErrorText(502, { error: "ServiceStartError", message: "服务进程提前退出" }), /没能启动：服务进程提前退出/);
+  assert.equal(L.auditionErrorText(502, { error: "IrodoriRequestError", engine: "irodori", status: 400, error_type: "invalid_request_error" }), "Irodori 返回了 400（invalid_request_error），合成失败");
+  assert.equal(L.auditionErrorText(502, { error: "HTTPStatusError", engine: "gpt_sovits", status: 500 }), "GPT-SoVITS 返回了 500，合成失败");
+  assert.match(L.auditionErrorText(404, { error: "character not found" }), /找不到这个角色/);
+  assert.match(L.auditionErrorText(400, { error: "invalid caption" }), /参数不合法：invalid caption/);
+  assert.match(L.auditionErrorText(502, { error: "RuntimeError" }), /合成失败：RuntimeError/);
+  assert.doesNotThrow(() => L.auditionErrorText(0, null));
+});
+
+test("U5-1 test chat: a good reply is no problem; every failure has words", () => {
+  assert.equal(L.testChatProblemText({ result: "ok", replies: ["你好"] }, null), "");
+  assert.equal(L.testChatProblemText({ result: "ok", replies: [] }, null), "没有拿到回复");
+  assert.match(L.testChatProblemText({ result: "Timeout", replies: [] }, null), /时限/);
+  assert.match(L.testChatProblemText({ result: "StUnavailable" }, null), /ST 扩展没连上/);
+  assert.match(L.testChatProblemText({ result: "Weird" }, null), /（Weird）/);
+  assert.match(L.testChatProblemText(null, { message: "NoOwner" }), /认领主人/);
+  assert.match(L.testChatProblemText(null, { message: "Busy" }), /测试在进行/);
+  assert.match(L.testChatProblemText(null, { message: "boom" }), /发送失败：boom/);
+  assert.match(L.TESTCHAT_NOTE, /不发到 QQ/);
+  assert.match(L.TESTCHAT_NOTE, /ST/);
+});
+
+// ---------- U5-2: settings search ----------
+const SEARCH_INDEX = [
+  { kind: "page", label: "语音", keys: "voice", help: "", path: ["语音"] },
+  { kind: "tab", label: "日志", keys: "system logs", help: "", path: ["系统", "日志"] },
+  { kind: "card", label: "消息排队", keys: "", help: "", path: ["接入", "消息排队"] },
+  { kind: "setting", label: "最多排队条数", keys: "queue-max-waiting max_waiting queue", help: "1～20，不含正在处理的", path: ["接入", "消息排队", "最多排队条数"] },
+  { kind: "setting", label: "回复时限", keys: "queue-reply-timeout reply_timeout_seconds queue", help: "等 ST 生成回复的最长时间", path: ["接入", "消息排队", "回复时限"] },
+  { kind: "setting", label: "语音等待上限", keys: "voice_wait_seconds tts-common", help: "超过这个时间还没好就只发文字", path: ["语音", "通用设置", "语音等待上限"] },
+  { kind: "setting", label: "触发概率", keys: "prob tts-common", help: "回复触发语音的概率", path: ["语音", "通用设置", "触发概率"] },
+  { kind: "item", label: "开心", keys: "", help: "", path: ["角色和情绪", "角色", "开心"] },
+  { kind: "setting", label: "NapCat 端口", keys: "network-onebot-port onebot_port", help: "NapCat 连接核心的端口", path: ["系统", "常规", "端口", "NapCat 端口"] }
+];
+const labelsOf = (query) => L.searchEntries(SEARCH_INDEX, query).map((entry) => entry.label);
+
+test("U5-2 search: nothing typed, nothing found", () => {
+  assert.deepEqual(labelsOf(""), []);
+  assert.deepEqual(labelsOf("   "), []);
+  assert.deepEqual(labelsOf("不存在的东西"), []);
+});
+
+test("U5-2 search: Chinese substrings match labels, help text and paths", () => {
+  assert.deepEqual(labelsOf("排队"), ["消息排队", "最多排队条数", "回复时限"]);  // the last one only through its path
+  assert.ok(labelsOf("只发文字").includes("语音等待上限"), "help text");
+  assert.ok(labelsOf("接入").includes("回复时限"), "path");
+  assert.deepEqual(labelsOf("等待上限"), ["语音等待上限"]);
+});
+
+test("U5-2 search: English parameter names match in any case, with _ - or a space between the words", () => {
+  assert.equal(labelsOf("REPLY_TIMEOUT_SECONDS")[0], "回复时限");
+  assert.equal(labelsOf("reply-timeout")[0], "回复时限");
+  assert.equal(labelsOf("reply timeout")[0], "回复时限");
+  assert.equal(labelsOf("queue-max-waiting")[0], "最多排队条数");
+  assert.equal(labelsOf("onebot")[0], "NapCat 端口");
+  assert.equal(labelsOf("napcat")[0], "NapCat 端口");
+  assert.equal(labelsOf("VOICE_WAIT")[0], "语音等待上限");
+});
+
+test("U5-2 search: every typed word must be found, in any order", () => {
+  assert.deepEqual(labelsOf("语音 概率"), ["触发概率"]);
+  assert.deepEqual(labelsOf("概率 语音"), ["触发概率"]);
+  assert.deepEqual(labelsOf("语音 不存在"), []);
+});
+
+test("U5-2 search: the better match comes first - exact label, label start, label part, key, path, help", () => {
+  assert.equal(labelsOf("语音")[0], "语音");           // the page itself
+  assert.equal(labelsOf("日志")[0], "日志");
+  const order = labelsOf("语音");
+  assert.ok(order.indexOf("语音") < order.indexOf("语音等待上限"), order.join());
+  assert.ok(order.indexOf("语音等待上限") < order.indexOf("触发概率"), "label hit before a path-only hit: " + order.join());
+});
+
+test("U5-2 search: at most 30 results, and the path reads page › tab › card › setting", () => {
+  const many = Array.from({ length: 80 }, (_, index) => ({ kind: "setting", label: `设置${index}`, keys: "", help: "", path: ["页", `设置${index}`] }));
+  assert.equal(L.searchEntries(many, "设置").length, 30);
+  assert.equal(L.SEARCH_LIMIT, 30);
+  assert.equal(L.searchPathText(SEARCH_INDEX[3]), "接入 › 消息排队 › 最多排队条数");
+  assert.equal(L.searchPathText({ path: ["a", "", "b"] }), "a › b");
+  assert.equal(L.normalizeSearchText("  Queue_MAX-Waiting "), "queue max waiting");
+});
+
+// ---------- U5-2: log filters ----------
+const LOG_LINES = [
+  "2026-11-12 10:00:00,123 INFO [STBridge] bridge started",
+  "2026-11-12 10:00:01,000 WARNING [STBridge] queue full user=ab12",
+  "2026-11-12 10:00:02,500 ERROR [STBridge] TTS conversion failed (RuntimeError)",
+  "Traceback (most recent call last):",
+  "2026-11-12 10:00:03 DEBUG [STBridge] poll",
+  "2026-11-12 10:00:04,000 CRITICAL [STBridge] gone",
+  "2026-11-12T10:00:05.000 WARN [STBridge] short warn name"
+];
+
+test("U5-2 logs: the level is read from the line, or empty when it cannot be", () => {
+  assert.deepEqual(LOG_LINES.map(L.parseLogLevel), ["info", "warning", "error", "", "debug", "critical", "warning"]);
+  assert.equal(L.parseLogLevel(""), "");
+  assert.equal(L.parseLogLevel(null), "");
+  assert.equal(L.parseLogLevel("INFO at the start but no time stamp"), "");
+});
+
+test("U5-2 logs: level filters - all, warning and above, errors only", () => {
+  const texts = (options) => L.filterLogLines(LOG_LINES, options).map((line) => line.text.slice(20, 30).trim());
+  assert.equal(L.filterLogLines(LOG_LINES, {}).length, 7);
+  assert.equal(L.filterLogLines(LOG_LINES, { level: "all" }).length, 7);
+  const warn = L.filterLogLines(LOG_LINES, { level: "warning" });
+  assert.deepEqual(warn.map((line) => line.level), ["warning", "error", "critical", "warning"]);
+  assert.deepEqual(L.filterLogLines(LOG_LINES, { level: "error" }).map((line) => line.level), ["error", "critical"]);
+  assert.ok(!L.filterLogLines(LOG_LINES, { level: "warning" }).some((line) => line.text.startsWith("Traceback")), "an unreadable line only shows under 全部");
+  assert.ok(texts({ level: "all" }).length === 7);
+});
+
+test("U5-2 logs: the keyword filter ignores case and combines with the level", () => {
+  assert.equal(L.filterLogLines(LOG_LINES, { keyword: "QUEUE" }).length, 1);
+  assert.equal(L.filterLogLines(LOG_LINES, { keyword: "stbridge" }).length, 6);
+  assert.equal(L.filterLogLines(LOG_LINES, { keyword: "stbridge", level: "error" }).length, 2);
+  assert.equal(L.filterLogLines(LOG_LINES, { keyword: "  traceback " }).length, 1);
+  assert.equal(L.filterLogLines(LOG_LINES, { keyword: "nothing like it" }).length, 0);
+  assert.deepEqual(L.filterLogLines(null, {}), []);
+});
+
+test("U5-2 logs: matches are cut out for highlighting, every occurrence, any case", () => {
+  assert.deepEqual(L.highlightSegments("a Queue b queue c", "QUEUE"), [
+    { text: "a ", match: false }, { text: "Queue", match: true }, { text: " b ", match: false },
+    { text: "queue", match: true }, { text: " c", match: false }
+  ]);
+  assert.deepEqual(L.highlightSegments("nothing", "x"), [{ text: "nothing", match: false }]);
+  assert.deepEqual(L.highlightSegments("anything", ""), [{ text: "anything", match: false }]);
+  assert.deepEqual(L.highlightSegments("<b>&", "b"), [{ text: "<", match: false }, { text: "b", match: true }, { text: ">&", match: false }]);
+  assert.equal(L.logCountText(3, 3), "共 3 行");
+  assert.equal(L.logCountText(2, 300), "显示 2 / 300 行");
+});
+
+test("U5-2 cleanup: the install backups row says how many and how big", () => {
+  assert.equal(L.installBackupsText(null), "还没有备份");
+  assert.equal(L.installBackupsText({ count: 0, bytes: 0, labels: {} }), "还没有备份");
+  assert.equal(L.installBackupsText({ count: 5, bytes: 3 * 1024 * 1024, labels: { "astrbot-plugin": { count: 3, bytes: 1 }, "st-extension": { count: 2, bytes: 1 } } }), "共 5 份（插件 3、扩展 2），占用 3.0 MB");
+});
+
+// ---------- U5-3 ----------
+
+test("the save bar says how many changes are waiting", () => {
+  assert.equal(L.saveBarText(3), "有 3 项修改未保存");
+  assert.equal(L.saveBarText(1), "有 1 项修改未保存");
+  assert.equal(L.saveBarText(0), "有修改未保存");
+  assert.equal(L.saveBarText(undefined), "有修改未保存");
+});
+
+test("config keys shown next to a setting's name: only identifier-like keys, never a repeat of the name", () => {
+  assert.equal(L.fieldKeyText("auto_start", "自动启动服务"), "auto_start");
+  assert.equal(L.fieldKeyText("tts.common.prob", "触发概率"), "tts.common.prob");
+  assert.equal(L.fieldKeyText("host", "host"), "");
+  assert.equal(L.fieldKeyText("preset:3:name", "名称"), "");
+  assert.equal(L.fieldKeyText("Happy", "x"), "");
+  assert.equal(L.fieldKeyText("", "x"), "");
+  assert.equal(L.fieldKeyText(null, "x"), "");
+  assert.equal(L.fieldKeyText("0", "x"), "");
+});
+
+test("the page help remembers open/closed and survives a storage that throws", () => {
+  const data = new Map();
+  const storage = { getItem: (k) => (data.has(k) ? data.get(k) : null), setItem: (k, v) => data.set(k, String(v)), removeItem: (k) => data.delete(k) };
+  assert.equal(L.readHelpOpen(storage, "sing"), false);
+  assert.equal(L.writeHelpOpen(storage, "sing", true), true);
+  assert.equal(L.readHelpOpen(storage, "sing"), true);
+  assert.equal(L.readHelpOpen(storage, "affinity"), false);
+  assert.equal(L.writeHelpOpen(storage, "sing", false), true);
+  assert.equal(L.readHelpOpen(storage, "sing"), false);
+  assert.equal(L.helpStorageKey("sing"), "stbridge.console.help.sing");
+  const broken = { getItem() { throw new Error("denied"); }, setItem() { throw new Error("full"); }, removeItem() { throw new Error("denied"); } };
+  assert.equal(L.readHelpOpen(broken, "sing"), false);
+  assert.equal(L.writeHelpOpen(broken, "sing", true), false);
+  assert.equal(L.writeHelpOpen(broken, "sing", false), false);
+  assert.equal(L.readHelpOpen(null, "sing"), false);
+  assert.equal(L.writeHelpOpen(undefined, "sing", true), false);
+});
+
+test("restore defaults takes only the keys the module holds that the defaults know", () => {
+  const defaults = { prob: 100, cooldown: 0, auto_start: true, extra: 1 };
+  assert.deepEqual(L.restoreValues(defaults, ["prob", "cooldown", "nope"]), { prob: 100, cooldown: 0 });
+  assert.deepEqual(L.restoreValues(defaults, []), {});
+  assert.deepEqual(L.restoreValues(null, ["prob"]), {});
+  assert.deepEqual(L.restoreValues(defaults, ["toString"]), {});
+});
+
+test("a drop-down with two or three options becomes buttons", () => {
+  assert.equal(L.useSegmented(1), false);
+  assert.equal(L.useSegmented(2), true);
+  assert.equal(L.useSegmented(3), true);
+  assert.equal(L.useSegmented(4), false);
+  assert.equal(L.useSegmented(NaN), false);
+  assert.equal(L.useSegmented(2, 8), true);
+  assert.equal(L.useSegmented(3, 20), true);
+  assert.equal(L.useSegmented(2, 21), false);
+});
+
+test("sidebar status: running, connecting, disconnected; the chat platform by name", () => {
+  assert.deepEqual(L.coreStatusView(null, 0), { level: "idle", text: "连接中…" });
+  assert.deepEqual(L.coreStatusView(null, 1), { level: "idle", text: "连接中…" });
+  assert.deepEqual(L.coreStatusView(null, 2), { level: "error", text: "连接断开" });
+  assert.deepEqual(L.coreStatusView({ platform: "astrbot" }, 0), { level: "ok", text: "运行中" });
+  assert.deepEqual(L.coreStatusView({ platform: "astrbot" }, 3), { level: "error", text: "连接断开" });
+  assert.equal(L.platformName({ platform: "napcat" }), "NapCat（QQ 小号）");
+  assert.equal(L.platformName({ platform: "astrbot" }), "AstrBot（QQ 官方机器人）");
+  assert.equal(L.platformName(null), "");
+  assert.equal(L.platformName({}), "");
 });

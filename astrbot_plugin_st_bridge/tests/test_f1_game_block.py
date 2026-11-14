@@ -69,6 +69,32 @@ class SelectionRuleTests(unittest.TestCase):
         reply = f"<game>{BODY}</game>尾<details>考据里提到 <game>x</game></details>"
         self.assertEqual(split_game_block(reply)[0], BODY)
 
+    def test_unclosed_details_mentioned_inside_a_think_does_not_hide_the_body(self):
+        reply = (
+            "<think_nya>格式提醒：故事考据放在 <details><summary>故事考据</summary> 中</think_nya>\n"
+            f"<game>{BODY}</game>尾\n<details><summary>故事考据</summary>\n- 考据\n</details>"
+        )
+        self.assertEqual(split_game_block(reply)[0], BODY)
+        self.assertEqual(_last_game_open(reply).start(), reply.index("<game>"))
+
+    def test_unclosed_comment_mentioned_inside_a_think_does_not_hide_the_body(self):
+        reply = (
+            "<think_nya>之后要写 <comment> 区域</think_nya>\n"
+            f"<game>{BODY}</game>尾\n<comment>喵呼呼\n</comment>"
+        )
+        self.assertEqual(split_game_block(reply)[0], BODY)
+
+    def test_think_mentioning_game_and_details_together(self):
+        reply = (
+            "<think>正文放 <game> 里，考据放 <details> 里，<game>x</game></think>\n"
+            f"<game>{BODY}</game>尾\n<details>考据 <game>y</game></details>"
+        )
+        self.assertEqual(split_game_block(reply), (BODY, "尾\n<details>考据 <game>y</game></details>"))
+
+    def test_unclosed_details_after_the_body_still_runs_to_the_end(self):
+        reply = f"<think>想</think><game>{BODY}</game>尾<details>被截断 <game>z</game>"
+        self.assertEqual(split_game_block(reply)[0], BODY)
+
     def test_truncated_body_runs_to_the_end(self):
         reply = f"<think_nya>想</think_nya><game>\n{BODY}"
         self.assertEqual(split_game_block(reply), (f"\n{BODY}", ""))

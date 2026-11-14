@@ -176,6 +176,7 @@ class QuotaFlowTests(SongFlowBase):
         self.plugin._core._song_now = lambda: self.now_dt
         self.quota = SongQuota(Path(self.directory.name), clock=lambda: self.now_dt)
         self.plugin._core._song_quota = self.quota
+        await self.set_song_settings(group_min_affinity=21)  # the old default these cases were written for
 
     def speaker(self, group=True):
         return self.plugin._core._speaker("qq-platform", "member-a" if group else "qq-user", "n", group=group)
@@ -402,6 +403,31 @@ class QuotaFlowTests(SongFlowBase):
             self.assertEqual(self.quota.used(MEMBER_KEY), 1)
             await self.finish_delivery(MEMBER_KEY)
         self.assertEqual(self.quota.used(MEMBER_KEY), 0)
+
+    async def test_tag_search_errors_do_not_pile_up_when_the_reply_is_cancelled_first(self):
+        """101e: a reply cancelled before _finish_song_tag used to leave its entry in the error table for good."""
+        import gc
+
+        core = self.plugin._core
+        self.assertEqual(len(core._song_tag_errors), 0)  # built in __init__, not lazily
+        task = core._start_song_tag_search(self.speaker(), "晴天")
+        self.assertIsNotNone(task)
+        self.assertIn(task, core._song_tag_errors)
+        task.cancel()
+        await asyncio.wait([task], timeout=5)
+        await asyncio.sleep(0.05)
+        del task
+        gc.collect()
+        gc.collect()
+        self.assertEqual(len(core._song_tag_errors), 0)
+
+    async def test_a_finished_tag_search_hands_its_errors_over_and_leaves_no_entry(self):
+        core = self.plugin._core
+        task = core._start_song_tag_search(self.speaker(), "晴天")
+        core._song_tag_errors[task].append("Timeout")
+        await asyncio.wait([task], timeout=5)
+        self.assertEqual(core._song_tag_errors.pop(task, []), ["Timeout"])
+        self.assertNotIn(task, core._song_tag_errors)
 
     async def test_the_tag_path_is_refused_when_full(self):
         await self.fill()

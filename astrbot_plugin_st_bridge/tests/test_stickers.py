@@ -49,7 +49,7 @@ def _unused_port():
 
 class StickerSettingsTests(unittest.TestCase):
     def test_defaults_and_fallback(self):
-        self.assertEqual(default_sticker_settings(), {"enabled": True, "prob": 30, "cooldown": 60})
+        self.assertEqual(default_sticker_settings(), {"enabled": True, "prob": 100, "cooldown": 0})
         self.assertEqual(sticker_settings({}), default_sticker_settings())
         self.assertEqual(sticker_settings({"stickers": {"prob": 1000}}), default_sticker_settings())
         self.assertEqual(sticker_settings(None), default_sticker_settings())
@@ -59,7 +59,7 @@ class StickerSettingsTests(unittest.TestCase):
             validate_sticker_settings({"enabled": False, "prob": 0, "cooldown": 3600}),
             {"enabled": False, "prob": 0, "cooldown": 3600},
         )
-        self.assertEqual(validate_sticker_settings({"prob": 100})["cooldown"], 60)
+        self.assertEqual(validate_sticker_settings({"prob": 100})["cooldown"], 0)
         for bad in (
             {"enabled": "yes"},
             {"prob": -1},
@@ -407,6 +407,7 @@ class StickerSendTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(event.sent), 1)
 
     async def test_cooldown_per_session(self):
+        await self._settings(cooldown=60)
         text = f"[情绪:{HAPPY}]☆‹「やった」›\n\"太好了\""
         first, _ = await self.reply(text)
         self.assertEqual(len(first.sent), 1)
@@ -439,6 +440,7 @@ class StickerSendTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(event.sent), 1)
 
     async def test_send_failure_is_swallowed_and_counts_for_cooldown(self):
+        await self._settings(cooldown=60)
         text = f"[情绪:{HAPPY}]☆‹「やった」›\n\"太好了\""
         event, results = await self.reply(text, fail=True)
         self.assertEqual(len(results), 1)

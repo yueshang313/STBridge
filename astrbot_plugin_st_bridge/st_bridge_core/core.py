@@ -7,6 +7,7 @@ ReplyBatch values it yields. The mixins hold the behavior; this class only owns 
 import asyncio
 import random
 import time
+import weakref
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from .http_protocol import BridgeRecoveryGate
 from .http_service import LocalHttpService
 from .log import logger
 from .mood_store import MoodStore
+from .owner_claim import OwnerClaim
 from .owner_config import owner_settings
 from .platform_api import IncomingMessage, PlatformAPI, ReplyBatch
 from .reply_stats import ReplyStats
@@ -35,6 +37,7 @@ from .tts_coordinator import TtsCoordinator
 from .bridge_types import _GroupSpeaker, _PendingSongList
 from .mixin_bridge import BridgeMixin
 from .mixin_lifecycle import LifecycleMixin
+from .mixin_owner import OwnerMixin
 from .mixin_schedule import ScheduleMixin
 from .mixin_song import SongMixin
 from .mixin_speaker import SpeakerMixin
@@ -47,6 +50,7 @@ class BridgeCore(
     LifecycleMixin,
     SpeakerMixin,
     BridgeMixin,
+    OwnerMixin,
     SongMixin,
     ScheduleMixin,
     StickerMixin,
@@ -113,7 +117,12 @@ class BridgeCore(
         self._queue = self._new_queue()
         # How the last requests to ST ended (memory only; the console health chain shows it).
         self._reply_stats = ReplyStats()
+        # The owner claim (console button + a private message with the 6 digits); memory only.
+        self._owner_claim = OwnerClaim()
+        self._claim_pending: dict[str, dict] = {}
         self._group_speakers: dict[str, _GroupSpeaker] = {}
+        # Per list-search task, the reasons a "[唱歌:…]" search failed (weak keys: a cancelled reply cannot leak one).
+        self._song_tag_errors: "weakref.WeakKeyDictionary[asyncio.Task, list[str]]" = weakref.WeakKeyDictionary()
         self._group_name_slot_counts: dict[str, int] = {}
         self._next_group_speaker_order = 1
         self._next_group_fallback_index = 1

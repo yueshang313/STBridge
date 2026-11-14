@@ -150,11 +150,11 @@ class ConsoleStatusRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_status_with_a_provider(self):
         payload = {"gate": "RECOVERED", "last_poll_age": 1.2, "active": False, "http_running": True}
         status, body = await self.get_status(bridge_status=lambda: payload)
-        self.assertEqual((status, body), (200, {"bridge": payload, "replies": None, "today": None, "wake_prefix": None, "connector": None, "platform": "astrbot", "onebot": None}))
+        self.assertEqual((status, body), (200, {"bridge": payload, "replies": None, "today": None, "wake_prefix": None, "connector": None, "platform": "astrbot", "onebot": None, "data_recovery": []}))
 
     async def test_status_without_a_provider(self):
         status, body = await self.get_status()
-        self.assertEqual((status, body), (200, {"bridge": None, "replies": None, "today": None, "wake_prefix": None, "connector": None, "platform": "astrbot", "onebot": None}))
+        self.assertEqual((status, body), (200, {"bridge": None, "replies": None, "today": None, "wake_prefix": None, "connector": None, "platform": "astrbot", "onebot": None, "data_recovery": []}))
 
 
 if __name__ == "__main__":

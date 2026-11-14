@@ -54,7 +54,8 @@ class BridgeQueue:
         *,
         clock: Callable[[], float] = time.monotonic,
         poll_interval: float = QUEUE_POLL_INTERVAL_SECONDS,
-        active_hold_limit: float | None = None,
+        # Seconds, or a function returning them (read at every check, so a console change applies at once).
+        active_hold_limit: float | Callable[[], float] | None = None,
         on_force_release: Callable[[QueueEntry, float], None] | None = None,
     ) -> None:
         self._clock = clock
@@ -168,14 +169,16 @@ class BridgeQueue:
     def _held_too_long(self) -> float | None:
         """Seconds the active slot has been held when that is past the limit (a stuck slot), else None. No side effects."""
         active = self._active
-        if (
-            active is None
-            or self._active_hold_limit is None
-            or active.dispatched_at is None
-        ):
+        limit = self._active_hold_limit
+        if callable(limit):
+            try:
+                limit = float(limit())
+            except Exception:
+                limit = None
+        if active is None or limit is None or active.dispatched_at is None:
             return None
         held = self._clock() - active.dispatched_at
-        return held if held > self._active_hold_limit else None
+        return held if held > limit else None
 
     def _free_stale_slot(self) -> None:
         active = self._active

@@ -8,11 +8,21 @@ from enum import Enum
 from typing import Any, TypeVar
 
 from aiohttp import web
+from aiohttp.abc import AbstractAccessLogger
 
 from .http_protocol import BridgeRecoveryGate, HttpProtocolConfig
 
 
 _T = TypeVar("_T")
+
+
+class ErrorOnlyAccessLogger(AbstractAccessLogger):
+    """Access log for the bridge listener: the ST client polls every second or two, so successful requests
+    (status < 400) are not logged; failures get one line with method, path and status (never headers or body)."""
+
+    def log(self, request: web.BaseRequest, response: web.StreamResponse, time: float) -> None:
+        if response.status >= 400:
+            self.logger.info("%s %s %s", request.method, request.path, response.status)
 
 
 class HttpServiceState(str, Enum):
@@ -81,7 +91,9 @@ class LocalHttpService:
             self._state = HttpServiceState.STARTING
             runner: web.AppRunner | None = None
             try:
-                runner = self._runner_factory(self._app, handle_signals=False)
+                runner = self._runner_factory(
+                    self._app, handle_signals=False, access_log_class=ErrorOnlyAccessLogger
+                )
                 self._runner = runner
                 await runner.setup()
                 site = self._site_factory(

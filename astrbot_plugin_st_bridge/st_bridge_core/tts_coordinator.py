@@ -10,12 +10,16 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import math
 import os
+import re
+import time
 from pathlib import Path
 from typing import Any, Callable
 
 from .emotion_config import TTS_ENGINES, validate_tts_settings
 from .tts_clients import (
+    local_http_client,
     ModelSelectionError,
     build_api_base_url,
     build_api_py_model_payload,
@@ -28,11 +32,57 @@ from .tts_clients import (
     profile_model_payload,
     usable_gpt_profile,
 )
-from .tts_service import ServiceManager
+from .tts_service import ServiceManager, ServiceStartError
 
 ENGINE_IRODORI = "irodori"
 ENGINE_GPT_SOVITS = "gpt_sovits"
 ENGINE_LABELS = {ENGINE_IRODORI: "Irodori", ENGINE_GPT_SOVITS: "GPT-SoVITS"}
+
+
+# What the Irodori server loads at start-up (PRELOAD): the checkpoint (hf_checkpoint, repo name), the audio codec and
+# the silentcipher watermark model. Each entry is (repo, files or folders that must be in its snapshot; empty = the
+# snapshot just has to hold something). The two fixed repos are the ones the Irodori installer pre-downloads.
+_IRODORI_CHECKPOINT_FILES = ("model.safetensors", "tokenizer")
+_IRODORI_FIXED_REPOS = (
+    ("Aratako/Semantic-DACVAE-Japanese-32dim", ("weights.pth",)),
+    ("sony/silentcipher", ()),
+)
+_HF_REPO_NAME = re.compile(r"^[A-Za-z0-9][\w.-]*/[\w.-]+$")
+
+
+def _hf_snapshot_complete(hub: str, repo: str, required: tuple[str, ...]) -> bool:
+    """True when ``refs/main`` of the cached repo points to a snapshot that holds the required entries."""
+    repo_dir = os.path.join(hub, "models--" + repo.replace("/", "--"))
+    try:
+        with open(os.path.join(repo_dir, "refs", "main"), encoding="utf-8") as handle:
+            commit = handle.read().strip()
+        if not commit or any(sep in commit for sep in "/\\"):
+            return False
+        snapshot = os.path.join(repo_dir, "snapshots", commit)
+        if not required:
+            return bool(os.listdir(snapshot))
+        for name in required:
+            path = os.path.join(snapshot, name)
+            if os.path.isdir(path):
+                if not os.listdir(path):
+                    return False
+            elif not os.path.isfile(path):
+                return False
+    except OSError:
+        return False
+    return True
+
+
+def _irodori_models_cached(hub: str, checkpoint: str) -> bool:
+    """Everything the server loads at start-up is already in the HF cache (so it can start without the network).
+
+    A checkpoint that is not a plain "owner/name" repo (a local path, a drive letter) is never treated as cached.
+    """
+    if not _HF_REPO_NAME.match(checkpoint) or os.path.exists(checkpoint):
+        return False
+    if not _hf_snapshot_complete(hub, checkpoint, _IRODORI_CHECKPOINT_FILES):
+        return False
+    return all(_hf_snapshot_complete(hub, repo, required) for repo, required in _IRODORI_FIXED_REPOS)
 
 
 def _irodori_signature(section: dict[str, Any]) -> tuple:
@@ -49,6 +99,11 @@ _SIGNATURES: dict[str, Callable[[dict[str, Any]], tuple]] = {
 }
 
 
+# After a failed service start the voice stays off (text only) for this long, so a broken
+# engine does not make every reply wait for another doomed start (101e).
+START_FAILURE_COOLDOWN_SECONDS = 300.0
+
+
 class TtsCoordinator:
     def __init__(
         self,
@@ -57,8 +112,11 @@ class TtsCoordinator:
         data_dir: Path,
         logger: Any,
         manager_kwargs: dict[str, Any] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.settings = validate_tts_settings(settings)
+        self._cooldown_clock = clock
+        self._start_failed_until = 0.0
         self._data_dir = Path(data_dir)
         self._logger = logger
         # Test hook: fake launcher/probe/killer/clock for the service managers.
@@ -138,14 +196,20 @@ class TtsCoordinator:
     def _irodori_env(section: dict[str, Any]) -> dict[str, str]:
         # The Irodori clone is not installed into its venv: it is imported from the
         # working directory, and the server package comes from PYTHONPATH.
-        return {
+        hub = os.path.join(section["launch_dir"], "model_cache", "hub")
+        env = {
             "PYTHONPATH": os.path.join(section["server_dir"], "src"),
-            "HF_HUB_CACHE": os.path.join(section["launch_dir"], "model_cache", "hub"),
+            "HF_HUB_CACHE": hub,
             "IRODORI_HF_CHECKPOINT": section["hf_checkpoint"],
             "IRODORI_PRELOAD": "true",
             "IRODORI_COMPILE_MODEL": "false",
             "IRODORI_VOICES_DIR": os.path.join(section["server_dir"], "voices"),
         }
+        # PRELOAD asks HuggingFace about every repo it loads, and the start fails if the connection is reset
+        # half-way. When everything is already in the cache there is nothing to ask for.
+        if _irodori_models_cached(hub, section["hf_checkpoint"]):
+            env["HF_HUB_OFFLINE"] = "1"
+        return env
 
     def manager(self, engine: str | None = None) -> ServiceManager:
         engine = engine or self.engine
@@ -195,13 +259,27 @@ class TtsCoordinator:
                 )
             return {"stopped": stopped}
 
+    def start_cooldown_remaining(self) -> float:
+        """Seconds left of the post-failure pause (0 when the voice may try to start again)."""
+        return max(0.0, self._start_failed_until - self._cooldown_clock())
+
+    def _note_start_failure(self) -> None:
+        self._start_failed_until = self._cooldown_clock() + START_FAILURE_COOLDOWN_SECONDS
+
     async def status(self) -> dict[str, Any]:
         data = await self.manager().status()
         data["engine"] = self.engine
+        data["cooldown_seconds"] = round(self.start_cooldown_remaining())
         return data
 
     async def start_service(self) -> None:
-        await self.manager().ensure_started()
+        """The console's start button: ignores (and clears) the cooldown."""
+        self._start_failed_until = 0.0
+        try:
+            await self.manager().ensure_started()
+        except ServiceStartError:
+            self._note_start_failure()
+            raise
 
     async def stop_service(self) -> dict[str, Any]:
         return await self.manager().stop()
@@ -214,9 +292,18 @@ class TtsCoordinator:
         self._forget_current_model()
         if not self.common["auto_start"]:
             return
+        remaining = self.start_cooldown_remaining()
+        if remaining > 0:
+            raise ServiceStartError(
+                f"语音服务刚启动失败，{math.ceil(remaining)} 秒后才会再试（控制台手动启动不受限）"
+            )
         # The service forgets the model itself when it launches the process; doing
         # it again here would make a second waiting caller reload the model.
-        await service.ensure_started()
+        try:
+            await service.ensure_started()
+        except ServiceStartError:
+            self._note_start_failure()
+            raise
 
     async def terminate(self) -> None:
         for existing in list(self._managers.values()):
@@ -238,17 +325,14 @@ class TtsCoordinator:
         return build_api_base_url(section["host"], section["port"])
 
     async def _post(self, data: dict) -> bytes:
-        import httpx
-        return await post_api_py_audio(httpx.AsyncClient, self._gpt_base_url(), data, self.tts_timeout)
+        return await post_api_py_audio(local_http_client, self._gpt_base_url(), data, self.tts_timeout)
 
     async def _set_model(self, payload: dict[str, str]) -> None:
-        import httpx
-        await post_api_py_model(httpx.AsyncClient, self._gpt_base_url(), payload, self.tts_timeout)
+        await post_api_py_model(local_http_client, self._gpt_base_url(), payload, self.tts_timeout)
 
     async def _post_irodori(self, payload: dict) -> bytes:
-        import httpx
         return await post_irodori_audio(
-            httpx.AsyncClient, self._irodori_base_url(), payload, self.tts_timeout
+            local_http_client, self._irodori_base_url(), payload, self.tts_timeout
         )
 
     def _target_model(self, profile: dict | None) -> dict[str, str] | None:

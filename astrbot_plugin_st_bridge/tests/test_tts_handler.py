@@ -94,6 +94,7 @@ class HandlerCase(unittest.TestCase):
         self.host.port_open = True
         settings = default_tts_settings()
         settings["engine"] = self.engine
+        settings["common"].update(send_text_with_audio=False, split_messages=False)  # the behaviour these cases were written for
         self.tts = TtsCoordinator(
             settings,
             data_dir=Path(self.tmp.name),

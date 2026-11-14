@@ -10,6 +10,7 @@ install_plugin_namespace()
 from data.plugins.astrbot_plugin_st_bridge.st_bridge_core.tts_clients import (
     IrodoriRequestError,
     ModelSelectionError,
+    local_http_client,
     build_api_base_url,
     build_api_py_model_payload,
     build_api_py_payload,
@@ -485,6 +486,9 @@ class RealServerPostTests(unittest.TestCase):
     def _run(self, handler, payload=None):
         import httpx
 
+        return self._run_with(handler, httpx.AsyncClient, payload)
+
+    def _run_with(self, handler, client_factory, payload=None):
         async def scenario():
             app = web.Application()
             app.router.add_post("/v1/audio/speech", handler)
@@ -495,7 +499,7 @@ class RealServerPostTests(unittest.TestCase):
             port = site._server.sockets[0].getsockname()[1]
             try:
                 return await post_irodori_audio(
-                    httpx.AsyncClient, f"http://127.0.0.1:{port}/", payload or {"input": "x"}, 10
+                    client_factory, f"http://127.0.0.1:{port}/", payload or {"input": "x"}, 10
                 )
             finally:
                 await runner.cleanup()
@@ -512,6 +516,26 @@ class RealServerPostTests(unittest.TestCase):
         payload = build_irodori_payload("こんにちは", _style_profile(), SETTINGS)
         self.assertEqual(self._run(handler, payload), b"RIFFfake")
         self.assertEqual(seen["json"], payload)
+
+    def test_local_client_ignores_system_proxy_environment(self):
+        import os
+        from unittest import mock
+
+        async def handler(request):
+            return web.Response(body=b"RIFFfake", content_type="audio/wav")
+
+        # A dead proxy in the environment must not be used for 127.0.0.1 services (laptop 502 bug).
+        env = {k: "http://127.0.0.1:9" for k in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy")}
+        env.update({"NO_PROXY": "", "no_proxy": ""})
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(self._run_with(handler, local_http_client), b"RIFFfake")
+
+    def test_local_client_is_created_with_trust_env_false(self):
+        from unittest import mock
+
+        with mock.patch("httpx.AsyncClient") as factory:
+            local_http_client(timeout=5)
+        factory.assert_called_once_with(trust_env=False, timeout=5)
 
     def test_error_status_exposes_only_status_and_type(self):
         async def handler(request):

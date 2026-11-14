@@ -253,6 +253,7 @@ class PermissionWriteTests(SongFlowBase):
         self.assertIs(speaker.sing_allowed, False)
 
     async def test_group_threshold_boundary(self):
+        await self.set_song_settings(group_min_affinity=21)
         for value, expected in ((20, 0), (21, 1), (-50, 0), (100, 1)):
             with self.subTest(value=value):
                 self.plugin._core._affinity_store.set_value(MEMBER_KEY, value, low=-50, high=100)
@@ -397,6 +398,35 @@ class TagPathTests(SongFlowBase):
         event = self.make_event("唱首歌吧")
         await self.run_tag_turn(event, TAG_REPLY)
         self.assertEqual([chain.chain[0].text for chain in event.sent], [FAIL])
+        self.assertIn("result=failed:NoResults", self.song_logs()[-1])
+
+    async def _failed_tag_search_log(self, error):
+        self.cover.search_error = error
+        event = self.make_event("唱首歌吧")
+        await self.run_tag_turn(event, TAG_REPLY)
+        self.assertEqual([chain.chain[0].text for chain in event.sent], [FAIL])  # the user's text is unchanged
+        log = self.song_logs()[-1]
+        self.assertNotIn("NoResults", log)
+        self.assertNotIn("secret", log)
+        return log
+
+    async def test_the_log_names_the_exception_type_when_the_search_raised(self):
+        log = await self._failed_tag_search_log(RuntimeError("boom D:/secret"))
+        self.assertIn("result=failed:wy=RuntimeError,kg=RuntimeError", log)
+
+    async def test_the_log_says_when_the_music_key_is_not_set(self):
+        error = submodule(self.module, "cover_service").CoverError("MusicKeyNotSet")
+        log = await self._failed_tag_search_log(error)
+        self.assertIn("result=failed:MusicKeyNotSet", log)
+
+    async def test_a_source_error_reported_inside_the_result_is_logged_too(self):
+        async def failing(name, source):
+            return {"results": [], "errors": [{"source": source, "error": "HTTP500"}]}
+
+        self.cover.search_online = failing
+        event = self.make_event("唱首歌吧")
+        await self.run_tag_turn(event, TAG_REPLY)
+        self.assertIn("result=failed:wy=HTTP500,kg=HTTP500", self.song_logs()[-1])
 
     async def test_a_failing_event_send_never_breaks_the_turn(self):
         event = self.make_event("唱首歌吧")
@@ -862,6 +892,7 @@ class LinkTests(SongFlowBase):
         self.assertTrue(any("via=link" in line and "skip:NotAllowed" in line for line in self.song_logs()))
 
     async def test_group_member_below_the_threshold_is_refused(self):
+        await self.set_song_settings(group_min_affinity=21)
         self.plugin._core._affinity_store.set_value(MEMBER_KEY, 20, low=-50, high=100)
         self.assertEqual(await self.say("https://music.163.com/song?id=5", group=True), [REFUSE])
         self.plugin._core._affinity_store.set_value(MEMBER_KEY, 21, low=-50, high=100)
@@ -950,6 +981,23 @@ class CommandTests(SongFlowBase):
         self.cover.results = {"wy": [], "kg": []}
         self.assertEqual(await self.sing("唱 晴天"), [FAIL])
         self.assertEqual(self.plugin._core._song_pending, {})
+        self.assertIn("result=failed:NoResults", self.song_logs()[-1])
+
+    async def test_a_failed_search_is_logged_with_its_reason_and_the_user_text_is_unchanged(self):
+        self.cover.search_error = submodule(self.module, "cover_service").CoverError("MusicKeyNotSet")
+        self.assertEqual(await self.sing("唱 晴天"), [FAIL])
+        log = self.song_logs()[-1]
+        self.assertIn("result=failed:MusicKeyNotSet", log)
+        self.assertNotIn("NoResults", log)
+
+    async def test_a_search_timeout_is_logged_as_timeout(self):
+        async def never(name, source):
+            await asyncio.Event().wait()
+
+        self.cover.search_online = never
+        with patch.object(submodule(self.module, "mixin_song"), "SONG_SEARCH_TIMEOUT_SECONDS", 0.05):
+            self.assertEqual(await self.sing("唱 晴天"), [FAIL])
+        self.assertIn("result=failed:Timeout", self.song_logs()[-1])
 
     async def test_private_chat_from_anyone_but_the_operator_gets_no_reply(self):
         event = self.make_event("唱 晴天")
@@ -958,6 +1006,7 @@ class CommandTests(SongFlowBase):
         self.assertEqual(self.cover.calls, [])
 
     async def test_group_members_use_the_member_track(self):
+        await self.set_song_settings(group_min_affinity=21)
         replies = await self.sing("唱 晴天", group=True)
         self.assertIn("群里请 @我 再回复哦。", replies[0])
         self.assertTrue(self.plugin._core._song_pending[(GROUP_UMO, MEMBER_KEY)].group)

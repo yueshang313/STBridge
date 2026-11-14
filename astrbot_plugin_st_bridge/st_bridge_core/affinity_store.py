@@ -23,7 +23,14 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from .emotion_config import AFFINITY_MAX, AFFINITY_MIN, EmotionConfigError, _replace_with_retry
+from .emotion_config import (
+    AFFINITY_MAX,
+    AFFINITY_MIN,
+    CorruptDataFile,
+    EmotionConfigError,
+    _replace_with_retry,
+    quarantine_file,
+)
 
 
 AFFINITY_FILE_NAME = "affinity.json"
@@ -191,7 +198,13 @@ class AffinityStore:
         # True when an older file could not be migrated yet (owner unknown).
         self.migration_pending = False
         self.migrated = False
+        # {"used": "backup" | "empty", "broken": [renamed file names]} after an unusable file was set aside.
+        self.recovery: dict[str, Any] | None = None
         self.data = self._load_or_create()
+
+    @property
+    def backup_path(self) -> Path:
+        return self.path.with_name(AFFINITY_FILE_NAME + ".bak")
 
     @staticmethod
     def is_owner(key: str) -> bool:
@@ -203,21 +216,58 @@ class AffinityStore:
             self._atomic_write(data)
             return data
         try:
-            with self.path.open("r", encoding="utf-8") as handle:
-                data = json.load(handle)
-        except (OSError, json.JSONDecodeError) as exc:
+            data = self._read_checked(self.path)
+        except OSError as exc:
+            # A locked share or missing permission is not a broken file: leave everything alone.
             raise RuntimeError("cannot read affinity data") from exc
+        except CorruptDataFile:
+            data = self._recover()
+        if data["version"] < CURRENT_VERSION:
+            data = self._migrate(data)
+        return data
+
+    @staticmethod
+    def _read_checked(path: Path) -> dict[str, Any]:
+        with path.open("r", encoding="utf-8-sig") as handle:
+            try:
+                data = json.load(handle)
+            except ValueError as exc:
+                raise CorruptDataFile("affinity data is not valid JSON") from exc
         if (
             not isinstance(data, dict)
             or data.get("version") not in (1, 2, CURRENT_VERSION)
             or not isinstance(data.get("users"), dict)
         ):
-            raise RuntimeError("affinity data has an invalid structure")
+            raise CorruptDataFile("affinity data has an invalid structure")
         for entry in data["users"].values():
             if not isinstance(entry, dict) or isinstance(entry.get("value"), bool) or not isinstance(entry.get("value"), int):
-                raise RuntimeError("affinity data has an invalid entry")
-        if data["version"] < CURRENT_VERSION:
-            data = self._migrate(data)
+                raise CorruptDataFile("affinity data has an invalid entry")
+        return data
+
+    def _recover(self) -> dict[str, Any]:
+        """affinity.json is unusable: set it aside, then use affinity.json.bak, else start empty."""
+        broken = [quarantine_file(self.path)]
+        if broken[0] is None:
+            raise RuntimeError("cannot set aside the broken affinity data")
+        data: dict[str, Any] | None = None
+        used = "empty"
+        backup = self.backup_path
+        if backup.exists():
+            try:
+                data = self._read_checked(backup)
+            except CorruptDataFile:
+                name = quarantine_file(backup)
+                if name is not None:
+                    broken.append(name)
+            except OSError:
+                pass
+            else:
+                shutil.copy2(backup, self.path)  # the .bak itself is not touched
+                used = "backup"
+        if data is None:
+            data = {"version": CURRENT_VERSION, "users": {}}
+            self._atomic_write(data)  # no affinity.json exists now, so no .bak is replaced
+        self.recovery = {"used": used, "broken": broken}
         return data
 
     def _backup(self, suffix: str) -> None:
@@ -265,6 +315,11 @@ class AffinityStore:
                 handle.write("\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            if self.path.exists():
+                try:
+                    shutil.copy2(self.path, self.backup_path)  # the last good file, for a later recovery
+                except OSError:
+                    pass
             _replace_with_retry(temporary, self.path)
         finally:
             if os.path.exists(temporary):

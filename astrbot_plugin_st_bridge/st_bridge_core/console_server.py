@@ -10,12 +10,16 @@ console's own origin (against cross-site form and fetch submissions).
 from __future__ import annotations
 
 import asyncio
+import base64
 import functools
 import json
 import logging
 import mimetypes
+import io
 import os
+import time
 import urllib.parse
+import wave
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
@@ -45,6 +49,7 @@ from .cover_library import SONG_MAX_BYTES, audio_content_type
 from .cover_service import CoverError
 from .music_source import SOURCES
 from .song_request import song_request_settings, validate_song_request_settings
+from .diagnostics import build_diagnostics_zip
 from .storage_cleanup import cleanup_settings, validate_cleanup_settings
 from .proactive_chat_config import validate_proactive_chat
 from .schedule_config import (
@@ -68,10 +73,14 @@ from .emotion_config import (
     affinity_settings,
     affinity_tier_name,
     affinity_track,
+    default_config,
     default_nickname,
     default_st_name,
     mood_settings,
+    ONBOARDING_KEYS,
+    console_settings,
     queue_settings,
+    validate_onboarding,
     sticker_settings,
     validate_mood_settings,
     validate_sticker_settings,
@@ -83,6 +92,7 @@ from .emotion_config import (
     safe_audio_stem,
     safe_emotion,
     safe_name,
+    select_tts_profile,
     unique_audio_path,
     validate_emotion_profile,
     validate_nickname,
@@ -138,6 +148,8 @@ _CLEANUP_KEY = web.AppKey("console_cleanup", Any)
 _INSTALL_KEY = web.AppKey("console_install", Any)
 _RESTART_KEY = web.AppKey("console_restart", Any)
 _TEST_CHAT_KEY = web.AppKey("console_test_chat", Any)
+_CLAIM_START_KEY = web.AppKey("console_owner_claim_start", Any)
+_CLAIM_STATUS_KEY = web.AppKey("console_owner_claim_status", Any)
 
 _dumps = functools.partial(json.dumps, ensure_ascii=False)
 
@@ -294,6 +306,14 @@ async def _health(_: web.Request) -> web.Response:
 
 async def _get_config(request: web.Request) -> web.Response:
     return _json(request.app[_STORE_KEY].public())
+
+
+async def _get_config_defaults(request: web.Request) -> web.Response:
+    """The factory settings, read-only: what a module's "恢复默认" button fills in (nothing user-specific)."""
+    result = default_config()
+    if isinstance(result.get("cover"), dict):
+        result["cover"] = public_cover_settings(result["cover"])
+    return _json(result)
 
 
 async def _list_models(request: web.Request) -> web.Response:
@@ -655,7 +675,59 @@ async def _test_chat(request: web.Request) -> web.Response:
         raise EmotionConfigError(503, "test chat unavailable")
     if request.content_type != "application/json":
         raise EmotionConfigError(415, "application/json required")
-    return _json(await runner(await _json_body(request)))
+    result = await runner(await _json_body(request))
+    if isinstance(result, dict) and result.get("result") == "ok" and result.get("replies"):
+        await _mark_onboarding(request, {"tested": True})
+    return _json(result)
+
+
+async def _mark_onboarding(request: web.Request, changes: dict[str, bool]) -> dict[str, bool]:
+    """Set checklist flags in the config (only writes when something changes); returns the flags."""
+    store = request.app[_STORE_KEY]
+    current = console_settings(store.config)["onboarding"]
+    wanted = validate_onboarding({**current, **changes})
+    if wanted != current:
+        def update(config):
+            config["console"] = {**console_settings(config), "onboarding": wanted}
+
+        await store.update(update)
+    return wanted
+
+
+async def _get_onboarding(request: web.Request) -> web.Response:
+    return _json({"onboarding": console_settings(request.app[_STORE_KEY].config)["onboarding"]})
+
+
+async def _save_onboarding(request: web.Request) -> web.Response:
+    """The checklist's own flags: tested (set by a good test chat), voice_skipped, hidden, completed."""
+    data = await _json_body(request)
+    if not data or any(not isinstance(value, bool) for value in data.values()):
+        raise EmotionConfigError(400, "invalid onboarding")
+    unknown = set(data) - set(ONBOARDING_KEYS)
+    if unknown:
+        raise EmotionConfigError(400, "unknown onboarding key")
+    return _json({"onboarding": await _mark_onboarding(request, data)})
+
+
+def _recovery_notices(request: web.Request) -> list[dict[str, Any]]:
+    """Data files that were unusable and replaced by a backup or defaults (101e); shown as a red bar."""
+    notices: list[dict[str, Any]] = []
+    store = request.app[_STORE_KEY]
+    if getattr(store, "recovery", None):
+        notices.append({"file": "config.json", **store.recovery})
+    affinity = request.app[_AFFINITY_KEY]
+    if affinity is not None and getattr(affinity, "recovery", None):
+        notices.append({"file": "affinity.json", **affinity.recovery})
+    return notices
+
+
+async def _dismiss_recovery(request: web.Request) -> web.Response:
+    """The red bar's "知道了" button: forget the notices (the renamed broken files stay on disk)."""
+    request.app[_STORE_KEY].recovery = None
+    affinity = request.app[_AFFINITY_KEY]
+    if affinity is not None:
+        affinity.recovery = None
+    return _json({"data_recovery": []})
 
 
 async def _get_status(request: web.Request) -> web.Response:
@@ -688,6 +760,7 @@ async def _get_status(request: web.Request) -> web.Response:
         "connector": connected,
         "platform": chat_platform_settings(request.app[_STORE_KEY].config)["active"],
         "onebot": _onebot_status(request),
+        "data_recovery": _recovery_notices(request),
     })
 
 
@@ -807,6 +880,22 @@ async def _save_owner(request: web.Request) -> web.Response:
 
     await store.update(update)
     return _json({"owner": settings})
+
+
+async def _get_owner_claim(request: web.Request) -> web.Response:
+    """The claim state the console polls: idle / pending (code + seconds left) / claimed / expired / failed."""
+    status = request.app[_CLAIM_STATUS_KEY]
+    if status is None:
+        raise EmotionConfigError(503, "owner claim unavailable")
+    return _json(status())
+
+
+async def _start_owner_claim(request: web.Request) -> web.Response:
+    """A new 6-digit code, valid for 5 minutes; the previous code stops working."""
+    start = request.app[_CLAIM_START_KEY]
+    if start is None:
+        raise EmotionConfigError(503, "owner claim unavailable")
+    return _json(start())
 
 
 def _injection_view(config: dict[str, Any]) -> dict[str, Any]:
@@ -1303,7 +1392,52 @@ async def _get_cleanup(request: web.Request) -> web.Response:
         "settings": cleanup_settings(request.app[_STORE_KEY].config),
         **overview,
         "cover_cache": await asyncio.to_thread(_cover_cache_usage, request),
+        "install_backups": await asyncio.to_thread(request.app[_INSTALL_KEY].backup_usage),
     })
+
+
+async def _clear_install_backups(request: web.Request) -> web.Response:
+    """The 清理 page's button: only the newest backup of the plugin and of the extension stays."""
+    result = await asyncio.to_thread(request.app[_INSTALL_KEY].clear_install_backups, 1)
+    return _json({**result, "install_backups": await asyncio.to_thread(request.app[_INSTALL_KEY].backup_usage)})
+
+
+async def _download_diagnostics(request: web.Request) -> web.Response:
+    """The diagnostics zip (U5-2): recent logs, state snapshots, versions and a redacted settings summary."""
+    from .console_install import _overview as install_overview  # late: that module imports this one
+
+    store = request.app[_STORE_KEY]
+
+    async def snapshot(producer):
+        try:
+            return await producer()
+        except Exception as error:
+            return {"error": type(error).__name__}
+
+    async def status_part():
+        return json.loads((await _get_status(request)).text)
+
+    async def install_part():
+        return await install_overview(request)
+
+    async def tts_part():
+        return await _tts_coordinator(request).status()
+
+    async def cover_part():
+        return await _cover_service(request).status()
+
+    status = await snapshot(status_part)
+    install = await snapshot(install_part)
+    services = {"语音": await snapshot(tts_part), "翻唱": await snapshot(cover_part)}
+    body = await asyncio.to_thread(
+        build_diagnostics_zip,
+        data_dir=store.data_dir, config=store.config, status=status, services=services, install=install,
+    )
+    return web.Response(
+        body=body,
+        content_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="st-bridge-diagnostics.zip"'},
+    )
 
 
 async def _save_cleanup_settings(request: web.Request) -> web.Response:
@@ -1452,6 +1586,101 @@ async def _stop_tts_service(request: web.Request) -> web.Response:
     return _json(await tts.status())
 
 
+TTS_TEST_TEXT = "こんにちは、音声のテストです。"
+TTS_TEST_MAX_CHARS = 200
+
+
+def _wav_seconds(audio: bytes) -> float | None:
+    try:
+        with wave.open(io.BytesIO(audio), "rb") as handle:
+            return round(handle.getnframes() / float(handle.getframerate()), 2)
+    except (wave.Error, EOFError, ZeroDivisionError):
+        return None
+
+
+def _tts_error_details(error: BaseException) -> dict:
+    """The HTTP status (and Irodori's error_type) of a failed synthesis; never the message, which can hold paths."""
+    details: dict = {}
+    status = getattr(error, "status", None)
+    if status is None:  # httpx.HTTPStatusError from GPT-SoVITS keeps it on the response
+        status = getattr(getattr(error, "response", None), "status_code", None)
+    if isinstance(status, int) and not isinstance(status, bool):
+        details["status"] = status
+    error_type = getattr(error, "error_type", None)
+    if isinstance(error_type, str) and error_type and len(error_type) <= 80:
+        details["error_type"] = error_type
+    return details
+
+
+async def _test_tts(request: web.Request) -> web.Response:
+    """Synthesize one sentence with the current engine and report what came back (nothing is saved or sent)."""
+    tts = _tts_coordinator(request)
+    store = request.app[_STORE_KEY]
+    raw = await request.read()
+    data = await _json_body(request) if raw.strip() else {}
+    text = data.get("text", TTS_TEST_TEXT)
+    if not isinstance(text, str) or not text.strip() or len(text) > TTS_TEST_MAX_CHARS:
+        raise EmotionConfigError(400, "invalid text")
+    return_audio = data.get("return_audio", False)
+    if not isinstance(return_audio, bool):
+        raise EmotionConfigError(400, "invalid return_audio")
+    config = store.config
+    character = data.get("character")
+    if character is not None:
+        if not isinstance(character, str) or character not in config.get("characters", {}):
+            raise EmotionConfigError(404, "character not found")
+        config = {**config, "default_character": character}
+    emotion = data.get("emotion")
+    if emotion is not None:
+        emotion = safe_emotion(emotion)
+    override = data.get("emotion_profile")
+    if override is not None:
+        # Unsaved form values of one emotion: checked like a save, used for this synthesis only (nothing is written).
+        if emotion is None:
+            raise EmotionConfigError(400, "emotion required with emotion_profile")
+        if not isinstance(override, dict) or set(override) - set(default_emotion()):
+            raise EmotionConfigError(400, "invalid emotion_profile")
+        name = config.get("default_character")
+        character_data = config.get("characters", {}).get(name)
+        if not isinstance(character_data, dict):
+            raise EmotionConfigError(404, "character not found")
+        saved = (character_data.get("emotions") or {}).get(emotion, {})
+        checked = validate_emotion_profile({**(saved if isinstance(saved, dict) else {}), **override})
+        config = {
+            **config,
+            "characters": {
+                **config["characters"],
+                name: {**character_data, "emotions": {**(character_data.get("emotions") or {}), emotion: checked}},
+            },
+        }
+    selection = select_tts_profile(config, emotion, default_audio_dir=store.audio_dir)
+    started = time.monotonic()
+    try:
+        audio = await tts.synthesize(text.strip(), selection.profile)
+    except ServiceStartError as error:
+        failure = {"ok": False, "error": "ServiceStartError", "message": str(error), "engine": tts.engine}
+        cooldown = round(tts.start_cooldown_remaining())
+        if cooldown > 0:
+            failure["cooldown_seconds"] = cooldown
+        return _json(failure, 502)
+    except Exception as error:  # the type only: the message can hold paths
+        return _json({"ok": False, "error": type(error).__name__, "engine": tts.engine, **_tts_error_details(error)}, 502)
+    result = {
+        "ok": True,
+        "engine": tts.engine,
+        "bytes": len(audio),
+        "duration_seconds": _wav_seconds(audio),
+        "elapsed_ms": int((time.monotonic() - started) * 1000),
+        "emotion": selection.emotion,
+        "profile_source": selection.source,
+    }
+    if return_audio:
+        # Only when asked (the console's 试听 button); the selftest and other callers get the same reply as before.
+        result["content_type"] = "audio/wav"
+        result["audio_base64"] = base64.b64encode(audio).decode("ascii")
+    return _json(result)
+
+
 # ---- 总预设 (whole-config presets) ---------------------------------------------------------------------
 
 
@@ -1593,6 +1822,8 @@ def create_console_app(
     install: Any = None,
     restart: Callable[[], dict | None] | None = None,
     test_chat: Callable[[Any], Any] | None = None,
+    owner_claim_start: Callable[[], dict] | None = None,
+    owner_claim_status: Callable[[], dict] | None = None,
 ) -> web.Application:
     """Build the console app without opening a listening socket."""
     app = web.Application(
@@ -1622,6 +1853,8 @@ def create_console_app(
     app[_INSTALL_KEY] = install if install is not None else InstallService(store.data_dir)
     app[_RESTART_KEY] = restart
     app[_TEST_CHAT_KEY] = test_chat
+    app[_CLAIM_START_KEY] = owner_claim_start
+    app[_CLAIM_STATUS_KEY] = owner_claim_status
     app[_PRESETS_KEY] = PresetStore(store.data_dir)
     app[_PRESETS_LOCK_KEY] = asyncio.Lock()
 
@@ -1630,6 +1863,10 @@ def create_console_app(
     router.add_get("/static/{tail:.+}", _static, allow_head=False)
     router.add_get("/api/health", _health, allow_head=False)
     router.add_get("/api/config", _get_config, allow_head=False)
+    router.add_post("/api/recovery/dismiss", _dismiss_recovery)
+    router.add_get("/api/onboarding", _get_onboarding, allow_head=False)
+    router.add_post("/api/onboarding", _save_onboarding)
+    router.add_get("/api/config/defaults", _get_config_defaults, allow_head=False)
     router.add_post("/api/config/defaults", _save_defaults)
     router.add_post("/api/config/gpt_sovits_root", _save_gpt_sovits_root)
     router.add_get("/api/fs/list", _browse_filesystem, allow_head=False)
@@ -1650,6 +1887,8 @@ def create_console_app(
     router.add_get("/api/logs/download", _download_logs, allow_head=False)
     router.add_get("/api/owner", _get_owner, allow_head=False)
     router.add_post("/api/owner", _save_owner)
+    router.add_get("/api/owner/claim", _get_owner_claim, allow_head=False)
+    router.add_post("/api/owner/claim", _start_owner_claim)
     router.add_get("/api/chat-platform", _get_chat_platform, allow_head=False)
     router.add_post("/api/chat-platform", _save_chat_platform)
     router.add_post("/api/texts", _save_texts)
@@ -1660,6 +1899,7 @@ def create_console_app(
     router.add_get("/api/tts/service", _get_tts_service, allow_head=False)
     router.add_post("/api/tts/service/start", _start_tts_service)
     router.add_post("/api/tts/service/stop", _stop_tts_service)
+    router.add_post("/api/tts/test", _test_tts)
     router.add_get("/api/stickers", _get_stickers, allow_head=False)
     router.add_post("/api/stickers/settings", _save_sticker_settings)
     router.add_post("/api/stickers/upload", _upload_stickers)
@@ -1689,6 +1929,8 @@ def create_console_app(
     router.add_post("/api/cleanup/run", _run_cleanup)
     router.add_post("/api/cleanup/settings", _save_cleanup_settings)
     router.add_post("/api/cleanup/covers/clear", _clear_cover_cache)
+    router.add_post("/api/cleanup/install-backups/clear", _clear_install_backups)
+    router.add_get("/api/diagnostics/download", _download_diagnostics, allow_head=False)
     router.add_post("/api/cover/online/search", _online_search)
     router.add_post("/api/cover/online/download", _online_download)
     router.add_post("/api/cover/online/fetch", _online_fetch)

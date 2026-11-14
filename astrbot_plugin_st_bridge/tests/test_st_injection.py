@@ -263,6 +263,7 @@ class MacroTests(unittest.TestCase):
 
     def test_unknown_value_uses_the_initial_one_and_no_character_falls_back(self):
         config = default_config()
+        config["characters"], config["default_character"] = {}, ""  # the case is "no character"
         macros = st_injection.build_macros(config, track="owner", value=None)
         self.assertEqual(macros["affinity"], "0")
         self.assertEqual(macros["emotions"], "neutral")

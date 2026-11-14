@@ -11,7 +11,8 @@ from .emotion_config import EMOTION_TAG_RE, OWNER_TRACK
 from .song_request import DEFAULT_PERMISSION_VARIABLE
 
 
-REQUEST_TIMEOUT_SECONDS = 120.0
+# The default reply time limit; the real one is queue.reply_timeout_seconds in the console settings.
+REQUEST_TIMEOUT_SECONDS = 180.0
 _JAPANESE_REPLY_PATTERN = re.compile(r"☆‹(.*?)›", re.DOTALL)
 _CHINESE_REPLY_PATTERN = re.compile(r'"([^"]*)"', re.DOTALL)
 _GAME_OPEN_PATTERN = re.compile(r"<game\s*>", re.IGNORECASE)
@@ -104,7 +105,13 @@ _NOTE_REGION = re.compile(r"<(comment|details)(?:\s[^>]*)?>.*?(?:</\1\s*>|\Z)", 
 
 
 def _ignored_regions(reply: str) -> list[tuple[int, int]]:
-    return [match.span() for pattern in (_THINK_REGION, _NOTE_REGION) for match in pattern.finditer(reply)]
+    # Paired think regions first; <comment>/<details> are only looked for outside them. Otherwise a think that
+    # merely mentions an unclosed "<details>" would start a region that runs on past </game> and hide the body.
+    think = [match.span() for match in _THINK_REGION.finditer(reply)]
+    masked = reply
+    for start, end in think:
+        masked = masked[:start] + " " * (end - start) + masked[end:]
+    return think + [match.span() for match in _NOTE_REGION.finditer(masked)]
 
 
 def _select_game(reply: str) -> tuple[re.Match, re.Match | None] | None:
